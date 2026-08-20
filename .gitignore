@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.env
+
+# Node & Frontend
+node_modules/
+.vite/
+
+# Database & Reports
+truthlens.db
+backend/truthlens.db
+backend/reports/*.pdf
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

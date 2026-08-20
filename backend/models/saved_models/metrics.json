@@ -1,0 +1,150 @@
+{
+  "version": "1.0.0",
+  "dataset_name": "TruthLens Multi-Domain Benchmark Corpus",
+  "total_samples": 1400,
+  "train_samples": 980,
+  "test_samples": 210,
+  "best_model": "linear_svm",
+  "models": {
+    "linear_svm": {
+      "key": "linear_svm",
+      "name": "Linear Support Vector Machine",
+      "type": "Support Vector Machine",
+      "description": "High-dimensional maximum-margin hyperplane separator with Platt probability calibration.",
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "roc_auc": 1.0,
+      "confusion_matrix": {
+        "tn": 105,
+        "fp": 0,
+        "fn": 0,
+        "tp": 105,
+        "matrix": [
+          [
+            105,
+            0
+          ],
+          [
+            0,
+            105
+          ]
+        ]
+      },
+      "test_samples": 210
+    },
+    "xgboost": {
+      "key": "xgboost",
+      "name": "XGBoost Classifier",
+      "type": "Gradient Boosted Trees",
+      "description": "State-of-the-art gradient boosted decision trees capturing non-linear term interactions.",
+      "accuracy": 0.9857,
+      "precision": 0.9861,
+      "recall": 0.9857,
+      "f1_score": 0.9857,
+      "roc_auc": 0.9999,
+      "confusion_matrix": {
+        "tn": 105,
+        "fp": 0,
+        "fn": 3,
+        "tp": 102,
+        "matrix": [
+          [
+            105,
+            0
+          ],
+          [
+            3,
+            102
+          ]
+        ]
+      },
+      "test_samples": 210
+    },
+    "logistic_regression": {
+      "key": "logistic_regression",
+      "name": "Logistic Regression",
+      "type": "Linear Generalized Model",
+      "description": "Interpretable linear baseline providing log-odds feature coefficients and well-calibrated probabilities.",
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "roc_auc": 1.0,
+      "confusion_matrix": {
+        "tn": 105,
+        "fp": 0,
+        "fn": 0,
+        "tp": 105,
+        "matrix": [
+          [
+            105,
+            0
+          ],
+          [
+            0,
+            105
+          ]
+        ]
+      },
+      "test_samples": 210
+    },
+    "naive_bayes": {
+      "key": "naive_bayes",
+      "name": "Multinomial Naive Bayes",
+      "type": "Probabilistic Bayesian Model",
+      "description": "Fast probabilistic generative classifier based on Bayes' theorem with term independence assumption.",
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "roc_auc": 1.0,
+      "confusion_matrix": {
+        "tn": 105,
+        "fp": 0,
+        "fn": 0,
+        "tp": 105,
+        "matrix": [
+          [
+            105,
+            0
+          ],
+          [
+            0,
+            105
+          ]
+        ]
+      },
+      "test_samples": 210
+    },
+    "random_forest": {
+      "key": "random_forest",
+      "name": "Random Forest",
+      "type": "Ensemble Decision Forest",
+      "description": "Bagging ensemble of randomized decision trees providing feature importance stability.",
+      "accuracy": 0.981,
+      "precision": 0.9817,
+      "recall": 0.981,
+      "f1_score": 0.9809,
+      "roc_auc": 1.0,
+      "confusion_matrix": {
+        "tn": 105,
+        "fp": 0,
+        "fn": 4,
+        "tp": 101,
+        "matrix": [
+          [
+            105,
+            0
+          ],
+          [
+            4,
+            101
+          ]
+        ]
+      },
+      "test_samples": 210
+    }
+  }
+}

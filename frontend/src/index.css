@@ -1,0 +1,52 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 font-sans antialiased selection:bg-amber-300 selection:text-slate-900;
+    min-height: 100vh;
+  }
+}
+
+/* Custom In-Text Highlights for Clean Light Theme */
+.truthlens-highlight {
+  @apply rounded px-1.5 py-0.5 font-medium transition-all duration-150 inline-block my-0.5 cursor-pointer;
+}
+
+.highlight-sensational {
+  @apply bg-rose-100 text-rose-900 border border-rose-300 hover:bg-rose-200;
+}
+
+.highlight-clickbait {
+  @apply bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200;
+}
+
+.highlight-stylistic {
+  @apply bg-purple-100 text-purple-900 border border-purple-300 hover:bg-purple-200;
+}
+
+.highlight-xai {
+  @apply bg-blue-100 text-blue-900 border border-blue-300 hover:bg-blue-200;
+}
+
+/* Custom Light Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(241, 245, 249, 0.8);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.5);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.8);
+}
