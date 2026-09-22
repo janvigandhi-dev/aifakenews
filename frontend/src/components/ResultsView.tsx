@@ -476,28 +476,28 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ result, onNewAnalysis 
               </h4>
 
               {/* Verdict Badge */}
-              {result.social_media_analysis.social_verdict && (
+              {result.social_media_analysis?.social_verdict && (
                 <div className={`p-4 rounded-xl border flex items-center gap-3 ${
-                  result.social_media_analysis.social_verdict.includes('TRUE') 
+                  (result.social_media_analysis.social_verdict || '').includes('TRUE') 
                     ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
-                    : result.social_media_analysis.social_verdict.includes('FALSE')
+                    : (result.social_media_analysis.social_verdict || '').includes('FALSE')
                     ? 'bg-rose-50 border-rose-300 text-rose-950'
-                    : result.social_media_analysis.social_verdict.includes('MISLEADING')
+                    : (result.social_media_analysis.social_verdict || '').includes('MISLEADING')
                     ? 'bg-amber-50 border-amber-300 text-amber-950'
                     : 'bg-slate-50 border-slate-300 text-slate-900'
                 }`}>
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                    result.social_media_analysis.social_verdict.includes('TRUE')
+                    (result.social_media_analysis.social_verdict || '').includes('TRUE')
                       ? 'bg-emerald-600 text-white'
-                      : result.social_media_analysis.social_verdict.includes('FALSE')
+                      : (result.social_media_analysis.social_verdict || '').includes('FALSE')
                       ? 'bg-rose-600 text-white'
-                      : result.social_media_analysis.social_verdict.includes('MISLEADING')
+                      : (result.social_media_analysis.social_verdict || '').includes('MISLEADING')
                       ? 'bg-amber-500 text-white'
                       : 'bg-slate-500 text-white'
                   }`}>
-                    {result.social_media_analysis.social_verdict.includes('TRUE') 
+                    {(result.social_media_analysis.social_verdict || '').includes('TRUE') 
                       ? <CheckCircle2 className="w-5 h-5" />
-                      : result.social_media_analysis.social_verdict.includes('FALSE')
+                      : (result.social_media_analysis.social_verdict || '').includes('FALSE')
                       ? <XCircle className="w-5 h-5" />
                       : <AlertTriangle className="w-5 h-5" />}
                   </div>
@@ -511,7 +511,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ result, onNewAnalysis 
                       </span>
                     )}
                     <p className="text-xs mt-0.5 opacity-80">
-                      {result.social_media_analysis.reasoning}
+                      {result.social_media_analysis.reasoning || ''}
                     </p>
                   </div>
                 </div>
