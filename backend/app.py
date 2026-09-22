@@ -57,32 +57,32 @@ class SwitchModelRequest(BaseModel):
 # Sample Presets for Demonstrations
 DEMO_PRESETS = [
     {
-        "id": "conspiracy-cure",
-        "title": "Sensational Medical Hoax",
-        "category": "Misinformation / Conspiratorial Health",
-        "headline": "SHOCKING: Secret Government Documents Leaked Proving All Cancer Cures Were Suppressed for Decades!",
-        "content": "A heroic whistleblower has just LEAKED explosive classified files that the deep state pharmaceutical mafia NEVER wanted you to see! The mind-blowing documents confirm that a 100% natural herbal remedy discovered in 1952 cures all forms of terminal cancer in just 48 hours, but corrupt billionaire elites buried it to protect their multi-trillion dollar profits! Mainstream media is under complete blackout! You won't believe what happens when you drink this everyday kitchen juice! Share this VIRAL warning before it gets banned and deleted from the internet forever! Wake up sheeple!"
+        "id": "rbi-gps-hoax",
+        "title": "₹2000 Note GPS Chip (Indian Viral Hoax)",
+        "category": "Misinformation / Viral WhatsApp Hoax",
+        "headline": "BREAKING: Reserve Bank of India has embedded a NGC (Nano GPS Chip) inside every new ₹2000 currency note!",
+        "content": "The state-of-the-art microchip acts as a signal reflector and can be tracked by Indian satellites even if notes are buried 120 meters underground without any power source. Income Tax department is already using satellite coordinates to raid secret black money godowns across the country. Forward this message to all Indian WhatsApp groups immediately so corrupt politicians get caught!"
     },
     {
-        "id": "genuine-reuters",
-        "title": "Mainstream Economic Reporting (Reuters Style)",
-        "category": "Credible / Neutral Journalism",
-        "headline": "Federal Reserve Holds Interest Rates Steady Amid Cooling Inflation Indicators",
-        "content": "The Federal Reserve concluded its two-day Federal Open Market Committee meeting on Wednesday, voting unanimously to maintain the benchmark federal funds rate. In the post-meeting statement, Fed officials cited easing consumer price index data and stable labor market conditions as justification for holding policy steady. Economists surveyed by Reuters noted that core inflation dropped 0.2 percentage points over the past quarter, reflecting tighter credit conditions. Fed Chairman Powell emphasized during the news conference that upcoming policy decisions will remain strictly data-dependent."
+        "id": "chandrayaan3-isro",
+        "title": "ISRO Chandrayaan-3 Moon Landing",
+        "category": "Credible / Indian Landmark Science",
+        "headline": "ISRO Makes History: Chandrayaan-3 Vikram Lander Successfully Lands on Moon's South Pole",
+        "content": "India has officially become the first nation in human history to land a spacecraft near the uncharted lunar south pole and the fourth country to achieve a soft landing on the Moon. The Indian Space Research Organisation (ISRO) confirmed that the Vikram lander touched down at 6:04 PM IST on August 23, 2023. Prime Minister Narendra Modi addressed scientists, congratulating the nation on the historic milestone."
     },
     {
-        "id": "space-discovery",
-        "title": "Peer-Reviewed Scientific Announcement",
-        "category": "Credible / Science",
-        "headline": "NASA James Webb Space Telescope Identifies Atmospheric Water Vapor in Exoplanet Orbit",
-        "content": "Astrophysicists analyzing spectroscopic data from the James Webb Space Telescope have confirmed the presence of atmospheric water vapor on exoplanet WASP-96b, located approximately 1,150 light-years away. The peer-reviewed study, published in the journal Nature Astronomy, utilized near-infrared instruments to measure chemical absorption signatures during planetary transit. Lead researcher Dr. Elena Vance explained that while the high atmospheric temperatures make the planet uninhabitable, the precision measurements provide critical insights into planetary formation models."
+        "id": "worldcup-1983",
+        "title": "1983 World Cup Historic Victory",
+        "category": "Credible / 1980s Historical News",
+        "headline": "June 25, 1983: Kapil Dev's Team India Stuns West Indies to Win Prudential World Cup at Lord's",
+        "content": "In one of the greatest moments in international sporting history, the underdog Indian cricket team captained by 24-year-old Kapil Dev defeated the reigning two-time world champion West Indies by 43 runs in the 1983 World Cup final at Lord's in London. Defending a modest total of 183 runs, Indian bowlers Mohinder Amarnath and Madan Lal took 3 wickets each, bowling out Clive Lloyd's West Indies team for 140."
     },
     {
-        "id": "clickbait-finance",
-        "title": "High-Urgency Financial Clickbait",
-        "category": "Misinformation / Financial Clickbait",
-        "headline": "YOU WON'T BELIEVE THIS: Rogue Whistleblower Exposes One Secret Trick That Instantly Eliminates All Debt!",
-        "content": "Banks and Wall Street millionaires are FURIOUS after an anonymous rogue mathematician exposed this one simple secret loop-hole that completely wipes out your mortgage, credit cards, and student loans overnight! Federal authorities are scrambling to shut down this webpage immediately! Doctors and financial advisors hate him for exposing the hidden truth! Click here right now to see the shocking video before corrupt bankers take it down!"
+        "id": "unesco-anthem-hoax",
+        "title": "UNESCO Declares Indian Anthem Best in World Hoax",
+        "category": "Misinformation / WhatsApp Viral Hoax",
+        "headline": "PROUD MOMENT: UNESCO Declares Indian National Anthem 'Jana Gana Mana' as the Best in the World",
+        "content": "During an international cultural summit in Geneva, UNESCO judges unanimously selected India's national anthem written by Rabindranath Tagore as the number one anthem among 195 countries for its divine rhythm and unity message. UNESCO President formally announced this award today. Share this with every true Indian citizen to make it viral worldwide!"
     }
 ]
 
