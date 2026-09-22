@@ -321,19 +321,21 @@ Respond with JSON only."""
         """
         extracted_text = ""
 
-        # 1. Try EasyOCR if available
+        # 1. Try EasyOCR if available (cached reader)
         try:
             import easyocr
             import numpy as np
             from PIL import Image
             import io
 
+            if not hasattr(self, '_ocr_reader') or self._ocr_reader is None:
+                self._ocr_reader = easyocr.Reader(['en'], gpu=False, verbose=False)
+
             img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-            reader = easyocr.Reader(['en'], gpu=False, verbose=False)
-            ocr_results = reader.readtext(np.array(img), detail=0)
+            ocr_results = self._ocr_reader.readtext(np.array(img), detail=0)
             extracted_text = " ".join(ocr_results).strip()
         except Exception as ocr_err:
-            print(f"[InstagramAnalyzer] EasyOCR not ready or skipped: {ocr_err}")
+            print(f"[InstagramAnalyzer] EasyOCR error or skipped: {ocr_err}")
 
         # 2. Try PyTesseract if EasyOCR failed
         if not extracted_text:

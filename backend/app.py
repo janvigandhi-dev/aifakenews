@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from typing import Optional, Dict, Any
-from fastapi import FastAPI, HTTPException, Response, Query, BackgroundTasks, UploadFile, File
+from fastapi import FastAPI, HTTPException, Response, Query, BackgroundTasks, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -99,6 +99,154 @@ def health_check():
 @app.get("/api/presets")
 def get_presets():
     return {"presets": DEMO_PRESETS}
+
+@app.post("/api/analyze-unified")
+async def analyze_unified(
+    text: Optional[str] = Form(default=""),
+    image: Optional[UploadFile] = File(default=None),
+    image_url: Optional[str] = Form(default=""),
+    model_name: Optional[str] = Form(default=None)
+):
+    """
+    Unified Single-Input Workflow:
+    1. Reads user text/description and/or uploaded image / image URL.
+    2. Runs OCR (EasyOCR / PyTesseract) on image to extract text if image is attached.
+    3. Surfs the internet in real-time for live news articles & reports.
+    4. Groq LLM cross-references claim with live web evidence.
+    5. Returns is_fake (True/False), percentages, and exact clickable web source references.
+    """
+    ocr_text = ""
+    image_analysis_meta = {}
+    user_text = (text or "").strip()
+
+    # 1. Process Image Upload if provided
+    if image and image.filename:
+        image_bytes = await image.read()
+        if len(image_bytes) > 20 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Image file is too large (max 20MB).")
+        if len(image_bytes) >= 100:
+            vision_result = instagram_analyzer._analyze_image_with_vision(image_bytes, image.filename)
+            ocr_text = vision_result.get("extracted_text", "")
+            image_analysis_meta = {
+                "description": vision_result.get("image_description", ""),
+                "extracted_text": ocr_text,
+                "image_type": vision_result.get("image_type", "IMAGE"),
+                "text_confidence": vision_result.get("text_confidence", "MEDIUM"),
+                "has_text": bool(ocr_text)
+            }
+
+    # 2. Process Image URL if provided (and no file)
+    elif image_url and image_url.strip():
+        img_url_clean = image_url.strip()
+        # Check if URL is an Instagram link
+        if instagram_analyzer._is_instagram_url(img_url_clean):
+            ig_result = await instagram_analyzer.analyze_instagram_link(img_url_clean)
+            if ig_result.get("success"):
+                ocr_text = ig_result.get("content", "")
+                if not user_text:
+                    user_text = ig_result.get("headline", "")
+        # Check if it is a direct image URL or general article
+        elif any(img_url_clean.lower().endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif"]):
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(img_url_clean)
+                    if resp.status_code == 200:
+                        vision_result = instagram_analyzer._analyze_image_with_vision(resp.content, "downloaded_image.jpg")
+                        ocr_text = vision_result.get("extracted_text", "")
+                        image_analysis_meta = {
+                            "description": vision_result.get("image_description", ""),
+                            "extracted_text": ocr_text,
+                            "image_type": "IMAGE_URL",
+                            "has_text": bool(ocr_text)
+                        }
+            except Exception as e:
+                print(f"[analyze_unified] Image URL download warning: {e}")
+        else:
+            # Regular web article link
+            extracted = await url_extractor.extract_from_url(img_url_clean)
+            if extracted.get("success"):
+                ocr_text = extracted.get("content", "")
+                if not user_text:
+                    user_text = extracted.get("title", "")
+
+    # 3. Validate that we have at least some text or OCR text
+    if not user_text and not ocr_text:
+        raise HTTPException(
+            status_code=400,
+            detail="Please provide news text/description or attach an image containing text to verify."
+        )
+
+    # Determine primary headline & content
+    if user_text and ocr_text:
+        headline = user_text.split("\n")[0][:150]
+        content = f"{user_text}\n\n[Extracted Text from Attached Image]:\n{ocr_text}"
+    elif ocr_text:
+        headline = ocr_text.split("\n")[0][:150]
+        content = ocr_text
+    else:
+        headline = user_text.split("\n")[0][:150]
+        content = user_text
+
+    # 4. Run Live Internet Search & Deep LLM Cross-Referencing
+    deep_evidence = evidence_verifier.deep_analyze_with_internet(headline, content, ocr_text)
+
+    # 5. Run standard ML pipeline for linguistic and XAI breakdown
+    analysis_result = model_service.analyze(
+        headline=headline,
+        content=content,
+        model_name=model_name
+    )
+
+    # 6. Merge LLM deep reasoning findings into analysis_result
+    if deep_evidence:
+        analysis_result["is_fake"] = deep_evidence.get("is_fake", analysis_result.get("is_fake", False))
+        analysis_result["verdict"] = deep_evidence.get("verdict", analysis_result.get("verdict"))
+        if "fake_percentage" in deep_evidence:
+            analysis_result["fake_percentage"] = deep_evidence["fake_percentage"]
+            analysis_result["misinformation_risk_score"] = deep_evidence["fake_percentage"]
+        if "real_percentage" in deep_evidence:
+            analysis_result["real_percentage"] = deep_evidence["real_percentage"]
+        if "confidence" in deep_evidence:
+            analysis_result["model_confidence"] = deep_evidence["confidence"]
+        if "verdict_summary" in deep_evidence:
+            analysis_result["verdict_summary"] = deep_evidence["verdict_summary"]
+        if "explanation_bullets" in deep_evidence and deep_evidence["explanation_bullets"]:
+            analysis_result["explanation_bullets"] = deep_evidence["explanation_bullets"]
+        
+        # Attach direct source references from internet search
+        analysis_result["source_references"] = deep_evidence.get("source_references", [])
+        
+        # Evidence section
+        analysis_result["evidence"] = {
+            "overall_evidence_verdict": deep_evidence.get("verdict"),
+            "confidence_score": deep_evidence.get("confidence"),
+            "summary_reasoning": deep_evidence.get("verdict_summary"),
+            "claims": deep_evidence.get("claims", []),
+            "source_references": deep_evidence.get("source_references", []),
+            "engine": deep_evidence.get("engine")
+        }
+
+    # Attach image metadata if image was used
+    if image_analysis_meta:
+        analysis_result["image_analysis"] = image_analysis_meta
+        analysis_result["source_type"] = "image_upload"
+    elif image_url:
+        analysis_result["url"] = image_url
+
+    # 7. Persist record to SQLite
+    record_id = save_analysis_record(
+        data=analysis_result,
+        headline=headline,
+        content=content,
+        url=image_url or ""
+    )
+    analysis_result["id"] = record_id
+    analysis_result["headline"] = headline
+    analysis_result["content"] = content
+    analysis_result["success"] = True
+
+    return analysis_result
 
 @app.post("/api/analyze")
 async def analyze_text(request: AnalyzeTextRequest):

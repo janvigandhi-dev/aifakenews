@@ -205,9 +205,9 @@ class ModelService:
         else:
             explanation_bullets.append(f"Model ({chosen_model_key}) identified linguistic markers and attribution typical of verified reporting.")
 
-        # 1. Check if Groq Deep Intelligence Engine is available
+        # 1. Check if Groq Deep Intelligence Engine with Internet Verification is available
         from backend.services.evidence_verifier import evidence_verifier
-        groq_analysis = evidence_verifier.deep_analyze_with_groq(headline=headline, content=content or combined_text)
+        groq_analysis = evidence_verifier.deep_analyze_with_internet(headline=headline, content=content or combined_text)
 
         if groq_analysis:
             is_fake_decision = bool(groq_analysis.get("is_fake", active_pred["prob_fake"] >= 0.50))
@@ -218,6 +218,7 @@ class ModelService:
             confidence = float(groq_analysis.get("confidence", active_pred["confidence"]))
             summary = groq_analysis.get("verdict_summary", verdict_data["summary"])
             bullets = groq_analysis.get("explanation_bullets", explanation_bullets)
+            source_refs = groq_analysis.get("source_references", [])
 
             # Map Groq flagged phrases to XAI format for highlighting
             flagged_terms = []
@@ -240,6 +241,7 @@ class ModelService:
                 "confidence_score": confidence,
                 "summary_reasoning": summary,
                 "claims": groq_analysis.get("claims", []),
+                "source_references": source_refs,
                 "engine": groq_analysis.get("engine", "Groq AI Intelligence Engine")
             }
 
@@ -268,7 +270,8 @@ class ModelService:
                 "multi_model_comparison": comparison_results,
                 "explanation_bullets": bullets,
                 "evidence": evidence_data,
-                "disclaimer": "Analysis synthesized by Groq AI Reasoning Engine with multi-model cross-validation."
+                "source_references": source_refs,
+                "disclaimer": "Analysis synthesized by Groq AI Reasoning Engine with live internet source cross-referencing."
             }
 
         # Boolean Fake News Decision (Local Fallback)

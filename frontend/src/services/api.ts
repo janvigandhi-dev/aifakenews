@@ -111,6 +111,13 @@ export interface AnalysisResponse {
     }>;
     engine?: string;
   };
+  source_references?: Array<{
+    title: string;
+    url: string;
+    publisher?: string;
+    relationship: string;
+    snippet?: string;
+  }>;
   disclaimer: string;
   // Social media & image analysis extensions
   source_type?: 'instagram' | 'image_upload';
@@ -158,6 +165,33 @@ export const api = {
   async getPresets() {
     const res = await fetch(`${API_BASE_URL}/api/presets`);
     return res.json();
+  },
+
+  async analyzeUnified(payload: {
+    text?: string;
+    imageFile?: File | null;
+    imageUrl?: string;
+    model_name?: string;
+  }): Promise<AnalysisResponse> {
+    const formData = new FormData();
+    if (payload.text) formData.append('text', payload.text);
+    if (payload.imageFile) formData.append('image', payload.imageFile);
+    if (payload.imageUrl) formData.append('image_url', payload.imageUrl);
+    if (payload.model_name) formData.append('model_name', payload.model_name);
+
+    const res = await fetch(`${API_BASE_URL}/api/analyze-unified`, {
+      method: 'POST',
+      body: formData
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Analysis request failed');
+    }
+    const data = await res.json();
+    if (data.success === false) {
+      throw new Error(data.error || 'Failed to analyze content');
+    }
+    return data;
   },
 
   async analyzeText(payload: { headline?: string; content?: string; model_name?: string; verify_evidence?: boolean }): Promise<AnalysisResponse> {
