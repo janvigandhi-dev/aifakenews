@@ -317,81 +317,89 @@ Respond with JSON only."""
 
     def _analyze_image_with_vision(self, image_bytes: bytes, filename: str) -> Dict[str, Any]:
         """
-        Send image to Groq Vision model for description + OCR text extraction.
+        Extract text and describe image using local OCR (EasyOCR / PyTesseract) and LLM reasoning.
         """
-        if not self.client:
+        extracted_text = ""
+
+        # 1. Try EasyOCR if available
+        try:
+            import easyocr
+            import numpy as np
+            from PIL import Image
+            import io
+
+            img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+            reader = easyocr.Reader(['en'], gpu=False)
+            ocr_results = reader.readtext(np.array(img), detail=0)
+            extracted_text = " ".join(ocr_results).strip()
+        except Exception as ocr_err:
+            print(f"[InstagramAnalyzer] EasyOCR not ready or skipped: {ocr_err}")
+
+        # 2. Try PyTesseract if EasyOCR failed
+        if not extracted_text:
+            try:
+                import pytesseract
+                from PIL import Image
+                import io
+
+                img = Image.open(io.BytesIO(image_bytes))
+                extracted_text = pytesseract.image_to_string(img).strip()
+            except Exception as t_err:
+                pass
+
+        # 3. If we have extracted text or Groq client, ask Groq to analyze the claim
+        if self.client and extracted_text:
+            prompt = f"""You are TruthLens, an Explainable AI fake news fact-checking system.
+A user uploaded an image from which the following text was extracted via OCR:
+
+EXTRACTED TEXT:
+{extracted_text[:3000]}
+
+Analyze this text and return a valid JSON object:
+{{
+  "image_description": "Detailed summary of what the image text describes",
+  "extracted_text": "{extracted_text[:1500].replace('"', '')}",
+  "headline": "Clear headline summarizing the news claim in the image",
+  "content": "2-4 sentence description of the news claim being conveyed",
+  "image_type": "NEWS_SCREENSHOT",
+  "has_text": true,
+  "text_confidence": "HIGH"
+}}
+Respond with JSON only."""
+            try:
+                completion = self.client.chat.completions.create(
+                    messages=[
+                        {"role": "system", "content": "You are a professional fact-checking engine. Respond with raw JSON only."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    model=settings.GROQ_MODEL,
+                    temperature=0.1,
+                    max_tokens=800,
+                    response_format={"type": "json_object"}
+                )
+                raw = completion.choices[0].message.content.strip()
+                return json.loads(raw)
+            except Exception as e:
+                print(f"[InstagramAnalyzer] LLM OCR analysis error: {e}")
+
+        # 4. Fallback if no OCR or text
+        if extracted_text:
             return {
-                "image_description": "Vision model unavailable. Please ensure GROQ_API_KEY is configured.",
-                "extracted_text": "",
-                "headline": "Image Analysis",
-                "content": ""
+                "image_description": f"Extracted {len(extracted_text.split())} words from uploaded image.",
+                "extracted_text": extracted_text,
+                "headline": extracted_text.split("\n")[0][:100] if extracted_text else "Image Analysis",
+                "content": extracted_text[:500],
+                "image_type": "NEWS_SCREENSHOT",
+                "has_text": True,
+                "text_confidence": "MEDIUM"
             }
 
-        # Determine MIME type
-        ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else "jpeg"
-        mime_map = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp", "gif": "image/gif"}
-        mime_type = mime_map.get(ext, "image/jpeg")
-
-        # Encode to base64
-        b64_image = base64.b64encode(image_bytes).decode("utf-8")
-
-        prompt = """You are TruthLens, an AI news verification system analyzing an uploaded image.
-
-Analyze this image carefully and provide:
-1. A detailed description of what the image shows (people, events, text overlays, graphics, logos)
-2. Extract ALL visible text from the image EXACTLY as written (OCR). Include headlines, captions, watermarks, chyrons, social media text, everything.
-3. Identify what NEWS CLAIM or information this image is trying to convey
-4. A clear headline summarizing the news claim in the image
-
-Return a valid JSON object:
-{
-  "image_description": "Detailed description of the image contents",
-  "extracted_text": "ALL visible text extracted from the image, preserving line breaks with \\n",
-  "headline": "Clear headline summarizing the news claim shown",
-  "content": "2-4 sentence description of the news claim or information being conveyed",
-  "image_type": "NEWS_SCREENSHOT" | "SOCIAL_MEDIA_POST" | "MEME" | "INFOGRAPHIC" | "PHOTOGRAPH" | "OTHER",
-  "has_text": true,
-  "text_confidence": "HIGH" | "MEDIUM" | "LOW"
-}
-Respond with JSON only."""
-
-        try:
-            completion = self.client.chat.completions.create(
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:{mime_type};base64,{b64_image}"
-                                }
-                            }
-                        ]
-                    }
-                ],
-                model=settings.GROQ_VISION_MODEL,
-                temperature=0.1,
-                max_tokens=1500
-            )
-
-            raw = completion.choices[0].message.content.strip()
-            cleaned = re.sub(r'^```(?:json)?\s*', '', raw, flags=re.MULTILINE)
-            cleaned = re.sub(r'\s*```$', '', cleaned, flags=re.MULTILINE)
-
-            json_match = re.search(r'(\{[\s\S]*\})', cleaned)
-            if json_match:
-                return json.loads(json_match.group(1))
-        except Exception as e:
-            print(f"[InstagramAnalyzer] Vision analysis error: {e}")
-
         return {
-            "image_description": "Could not analyze image with vision model.",
+            "image_description": f"Uploaded image file: {filename}",
             "extracted_text": "",
-            "headline": "Image Analysis",
-            "content": "The vision model could not process this image. Try uploading a clearer image.",
-            "image_type": "OTHER",
+            "headline": f"Image: {filename}",
+            "content": "Image uploaded. For best results with screenshots, ensure text is clearly legible.",
+            "image_type": "PHOTOGRAPH",
             "has_text": False,
             "text_confidence": "LOW"
         }
