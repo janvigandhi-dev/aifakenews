@@ -329,7 +329,7 @@ Respond with JSON only."""
             import io
 
             img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-            reader = easyocr.Reader(['en'], gpu=False)
+            reader = easyocr.Reader(['en'], gpu=False, verbose=False)
             ocr_results = reader.readtext(np.array(img), detail=0)
             extracted_text = " ".join(ocr_results).strip()
         except Exception as ocr_err:
