@@ -305,12 +305,25 @@ async def analyze_instagram(request: AnalyzeInstagramRequest):
             "prob_fake": 0,
             "prob_real": 0,
             "active_model": {"key": "N/A", "name": "N/A", "type": "N/A", "f1_score": 0},
-            "linguistic_risk": {"composite_risk_score": 0, "linguistic_score": 0, "model_risk_score": 0, "indicators": [], "breakdown": {}},
+            "linguistic_risk": {
+                "composite_risk_score": 0,
+                "linguistic_score": 0,
+                "model_risk_score": 0,
+                "indicators": [],
+                "breakdown": {
+                    "sensationalism": {"score": 0, "severity": "LOW", "matched_terms": [], "term_count": 0},
+                    "clickbait": {"score": 0, "severity": "LOW", "patterns": [], "pattern_count": 0},
+                    "emotional_intensity": {"score": 0, "severity": "LOW", "subjectivity": 0, "polarity": 0},
+                    "punctuation_caps": {"score": 0, "severity": "LOW", "caps_ratio": 0, "caps_word_count": 0, "caps_examples": []},
+                    "claim_density": {"score": 0, "severity": "LOW", "attribution_markers_found": 0, "absolute_assertions_found": 0},
+                    "headline_mismatch": {"score": 0, "severity": "LOW", "overlap_ratio": 0, "mismatch_detected": False}
+                }
+            },
             "xai_explanation": {"top_features": [], "fake_indicators": [], "real_indicators": [], "total_active_features": 0},
             "highlighted_analysis": {"spans": [], "highlighted_html": "", "total_annotations": 0},
             "text_statistics": {"word_count": 0, "char_count": 0, "sentence_count": 0, "caps_words_count": 0, "caps_ratio": 0, "exclamation_count": 0, "question_count": 0, "avg_word_length": 0, "avg_sentence_length": 0},
             "multi_model_comparison": {},
-            "explanation_bullets": ["Content extracted from Instagram was too brief for full ML analysis. Cross-referencing verdict is available."],
+            "explanation_bullets": ["Content extracted from Instagram was brief. Cross-referencing verdict is available."],
             "disclaimer": "Notice: Model confidence represents learned statistical classification probability based on training patterns, not philosophical or factual certainty."
         }
 
@@ -399,12 +412,25 @@ async def analyze_image_upload(file: UploadFile = File(...), model_name: Optiona
             "prob_fake": 0,
             "prob_real": 0,
             "active_model": {"key": "N/A", "name": "N/A", "type": "N/A", "f1_score": 0},
-            "linguistic_risk": {"composite_risk_score": 0, "linguistic_score": 0, "model_risk_score": 0, "indicators": [], "breakdown": {}},
+            "linguistic_risk": {
+                "composite_risk_score": 0,
+                "linguistic_score": 0,
+                "model_risk_score": 0,
+                "indicators": [],
+                "breakdown": {
+                    "sensationalism": {"score": 0, "severity": "LOW", "matched_terms": [], "term_count": 0},
+                    "clickbait": {"score": 0, "severity": "LOW", "patterns": [], "pattern_count": 0},
+                    "emotional_intensity": {"score": 0, "severity": "LOW", "subjectivity": 0, "polarity": 0},
+                    "punctuation_caps": {"score": 0, "severity": "LOW", "caps_ratio": 0, "caps_word_count": 0, "caps_examples": []},
+                    "claim_density": {"score": 0, "severity": "LOW", "attribution_markers_found": 0, "absolute_assertions_found": 0},
+                    "headline_mismatch": {"score": 0, "severity": "LOW", "overlap_ratio": 0, "mismatch_detected": False}
+                }
+            },
             "xai_explanation": {"top_features": [], "fake_indicators": [], "real_indicators": [], "total_active_features": 0},
             "highlighted_analysis": {"spans": [], "highlighted_html": "", "total_annotations": 0},
             "text_statistics": {"word_count": 0, "char_count": 0, "sentence_count": 0, "caps_words_count": 0, "caps_ratio": 0, "exclamation_count": 0, "question_count": 0, "avg_word_length": 0, "avg_sentence_length": 0},
             "multi_model_comparison": {},
-            "explanation_bullets": ["Image text extraction did not yield enough content for full ML analysis. See Vision AI analysis below."],
+            "explanation_bullets": ["Image text extraction completed. See Vision AI and Fact-Checking analysis below."],
             "disclaimer": "Notice: Model confidence represents learned statistical classification probability based on training patterns, not philosophical or factual certainty."
         }
 

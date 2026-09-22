@@ -270,57 +270,59 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ result, onNewAnalysis 
         <div className="space-y-4">
           
           {/* Why Was This Flagged */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-3 shadow-sm">
-            <h3 className="text-xs font-bold text-slate-800 uppercase font-mono tracking-wider">
-              Key Reasons & Warning Signs:
-            </h3>
+          {(result.explanation_bullets && result.explanation_bullets.length > 0) && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-3 shadow-sm">
+              <h3 className="text-xs font-bold text-slate-800 uppercase font-mono tracking-wider">
+                Key Reasons & Warning Signs:
+              </h3>
 
-            <div className="space-y-2">
-              {result.explanation_bullets.map((bullet, idx) => (
-                <div 
-                  key={idx}
-                  className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-2.5 text-xs text-slate-700 leading-relaxed"
-                >
-                  <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-800 font-bold flex items-center justify-center shrink-0 text-[10px]">
-                    {idx + 1}
-                  </span>
-                  <span>{bullet}</span>
-                </div>
-              ))}
+              <div className="space-y-2">
+                {result.explanation_bullets.map((bullet, idx) => (
+                  <div 
+                    key={idx}
+                    className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-2.5 text-xs text-slate-700 leading-relaxed"
+                  >
+                    <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-800 font-bold flex items-center justify-center shrink-0 text-[10px]">
+                      {idx + 1}
+                    </span>
+                    <span>{bullet}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Linguistic Badges */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3.5 rounded-xl bg-white border border-slate-200 text-center space-y-1 shadow-sm">
               <span className="text-[10px] text-slate-500 uppercase font-mono font-semibold">Sensational Words</span>
               <div className={`text-base font-bold font-mono ${
-                result.linguistic_risk.breakdown.sensationalism.severity === 'HIGH' ? 'text-rose-600' : 'text-slate-800'
+                result.linguistic_risk?.breakdown?.sensationalism?.severity === 'HIGH' ? 'text-rose-600' : 'text-slate-800'
               }`}>
-                {result.linguistic_risk.breakdown.sensationalism.severity}
+                {result.linguistic_risk?.breakdown?.sensationalism?.severity || 'LOW'}
               </div>
             </div>
 
             <div className="p-3.5 rounded-xl bg-white border border-slate-200 text-center space-y-1 shadow-sm">
               <span className="text-[10px] text-slate-500 uppercase font-mono font-semibold">Clickbait Tone</span>
               <div className={`text-base font-bold font-mono ${
-                result.linguistic_risk.breakdown.clickbait.severity === 'HIGH' ? 'text-rose-600' : 'text-slate-800'
+                result.linguistic_risk?.breakdown?.clickbait?.severity === 'HIGH' ? 'text-rose-600' : 'text-slate-800'
               }`}>
-                {result.linguistic_risk.breakdown.clickbait.severity}
+                {result.linguistic_risk?.breakdown?.clickbait?.severity || 'LOW'}
               </div>
             </div>
 
             <div className="p-3.5 rounded-xl bg-white border border-slate-200 text-center space-y-1 shadow-sm">
               <span className="text-[10px] text-slate-500 uppercase font-mono font-semibold">Emotional Intensity</span>
               <div className="text-base font-bold text-slate-800 font-mono">
-                {result.linguistic_risk.breakdown.emotional_intensity.severity}
+                {result.linguistic_risk?.breakdown?.emotional_intensity?.severity || 'LOW'}
               </div>
             </div>
 
             <div className="p-3.5 rounded-xl bg-white border border-slate-200 text-center space-y-1 shadow-sm">
               <span className="text-[10px] text-slate-500 uppercase font-mono font-semibold">ALL-CAPS Shouting</span>
               <div className="text-base font-bold text-slate-800 font-mono">
-                {result.linguistic_risk.breakdown.punctuation_caps.severity}
+                {result.linguistic_risk?.breakdown?.punctuation_caps?.severity || 'LOW'}
               </div>
             </div>
           </div>
@@ -336,7 +338,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ result, onNewAnalysis 
               Extracted Factual Claims & Status:
             </h3>
             <p className="text-xs text-slate-600">
-              {result.evidence.summary_reasoning}
+              {result.evidence.summary_reasoning || 'Claim analysis completed.'}
             </p>
           </div>
 
@@ -376,10 +378,16 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ result, onNewAnalysis 
             </p>
           </div>
 
-          <div 
-            className="p-5 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 text-sm leading-relaxed max-h-[420px] overflow-y-auto"
-            dangerouslySetInnerHTML={{ __html: result.highlighted_analysis.highlighted_html }}
-          />
+          {result.highlighted_analysis?.highlighted_html ? (
+            <div 
+              className="p-5 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 text-sm leading-relaxed max-h-[420px] overflow-y-auto"
+              dangerouslySetInnerHTML={{ __html: result.highlighted_analysis.highlighted_html }}
+            />
+          ) : (
+            <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-xs">
+              {result.content || result.headline || 'No in-text annotations available for this submission.'}
+            </div>
+          )}
         </div>
       )}
 
