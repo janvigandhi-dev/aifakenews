@@ -12,6 +12,10 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 SAVED_MODELS_DIR.mkdir(parents=True, exist_ok=True)
 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
+from dotenv import load_dotenv
+
+load_dotenv(PROJECT_DIR / ".env")
+
 class Settings(BaseSettings):
     APP_NAME: str = "TruthLens — Explainable AI Fake News Detection"
     APP_VERSION: str = "1.0.0"
@@ -20,6 +24,7 @@ class Settings(BaseSettings):
     # Groq API Key for Evidence Verification & Claim Extraction (read from environment or .env)
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
     GROQ_MODEL: str = "openai/gpt-oss-20b"
+    GROQ_VISION_MODEL: str = "meta-llama/llama-4-scout-17b-16e-instruct"
     
     # SQLite Database
     DATABASE_URL: str = f"sqlite:///{BASE_DIR}/truthlens.db"

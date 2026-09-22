@@ -7,88 +7,136 @@ from backend.config import settings
 class EvidenceVerifier:
     def __init__(self):
         self.client = None
-        if settings.GROQ_API_KEY:
+        self._init_client()
+
+    def _init_client(self):
+        key = settings.GROQ_API_KEY
+        if key:
             try:
-                self.client = Groq(api_key=settings.GROQ_API_KEY)
+                self.client = Groq(api_key=key)
             except Exception as e:
                 print(f"[EvidenceVerifier] Groq initialization warning: {e}")
 
-    def verify_claims(self, headline: str, content: str) -> Dict[str, Any]:
+    def deep_analyze_with_groq(self, headline: str, content: str) -> Optional[Dict[str, Any]]:
         """
-        Extracts key atomic claims from article text and analyzes evidence status:
-        - SUPPORTED
-        - CONTRADICTED
-        - REQUIRES VERIFICATION / UNCLEAR
+        Comprehensive AI Analysis using Groq LLM:
+        - Factual validation & Fake News Boolean (is_fake = True/False)
+        - Probability distribution (fake_percentage vs real_percentage)
+        - Linguistic manipulation, clickbait & emotional intensity
+        - Atomic claim extraction & stance checking
+        - Key highlighted phrases
         """
-        combined = f"Headline: {headline}\n\nContent:\n{content[:3500]}"
+        if not self.client and settings.GROQ_API_KEY:
+            self._init_client()
 
-        if self.client:
-            try:
-                prompt = f"""You are the Evidence Verification Engine of TruthLens, an Explainable AI Fake News Detection Platform.
-Analyze the following news text, extract 2 to 3 central factual claims, assess each claim's credibility against established factual knowledge, and identify authoritative source domains.
+        if not self.client:
+            return None
 
-TEXT TO ANALYZE:
+        combined = f"Headline: {headline}\n\nContent:\n{content[:4000]}"
+
+        prompt = f"""You are TruthLens, the world's most accurate Explainable AI News & Misinformation Analysis Engine.
+Analyze the following news text for factual veracity, misinformation patterns, sensationalism, clickbait hooks, and source credibility.
+
+NEWS TEXT:
 {combined}
 
-Return a valid JSON object with this exact schema:
+Return a STRICT JSON response adhering to this schema:
 {{
-  "overall_evidence_verdict": "SUPPORTED" | "CONTRADICTED" | "MIXED / REQUIRES VERIFICATION",
-  "confidence_score": 85,
-  "summary_reasoning": "Concise 1-2 sentence evidence synthesis.",
+  "is_fake": true | false,
+  "verdict": "LIKELY MISLEADING" | "SUSPICIOUS / REVIEW" | "REAL / LOW RISK",
+  "fake_percentage": 85.0,
+  "real_percentage": 15.0,
+  "misinformation_risk_score": 85.0,
+  "confidence": 92.0,
+  "verdict_summary": "Concise 1-2 sentence overall verdict explaining the decision.",
+  "explanation_bullets": [
+    "Specific reason 1 explaining why this is fake or real",
+    "Specific reason 2 citing missing attribution, conspiracy, or confirmed sources",
+    "Specific reason 3 analyzing emotional/clickbait tone"
+  ],
   "claims": [
     {{
       "claim": "Extracted atomic factual claim",
       "stance": "SUPPORTED" | "CONTRADICTED" | "UNVERIFIED",
-      "evidence_assessment": "Explanation of why this claim is supported or contradicted.",
+      "evidence_assessment": "Explanation of why this claim is supported, refuted, or unverified.",
       "plausibility": "HIGH" | "LOW" | "UNKNOWN",
-      "suggested_sources": ["Reuters", "Associated Press", "Nature", "CDC"]
+      "suggested_sources": ["Reuters", "Associated Press", "Nature", "WHO", "Official Archives"]
     }}
   ],
-  "source_references": [
+  "flagged_phrases": [
     {{
-      "title": "Authoritative Reference Body or Database",
-      "domain": "reuters.com / cdc.gov / nasa.gov / who.int",
-      "relationship": "Confirms / Refutes / Clarifies"
+      "text": "exact phrase from text",
+      "category": "Sensational Language" | "Clickbait Hook" | "False Claim" | "Exaggerated Assertion",
+      "severity": "HIGH" | "MEDIUM",
+      "reason": "Why this specific phrase was flagged"
     }}
-  ]
+  ],
+  "linguistic_metrics": {{
+    "sensationalism_severity": "HIGH" | "MEDIUM" | "LOW",
+    "sensationalism_score": 80.0,
+    "clickbait_severity": "HIGH" | "MEDIUM" | "LOW",
+    "clickbait_score": 75.0,
+    "emotional_intensity_severity": "HIGH" | "MEDIUM" | "LOW",
+    "emotional_score": 70.0,
+    "formatting_severity": "HIGH" | "MEDIUM" | "LOW",
+    "formatting_score": 50.0
+  }}
 }}
-Respond with JSON only."""
 
-                chat_completion = self.client.chat.completions.create(
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "You are a professional fact-checking analysis engine. Respond with raw JSON only."
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    model=settings.GROQ_MODEL,
-                    temperature=0.1,
-                    max_tokens=1000
-                )
+Respond with raw JSON only. Do not include markdown code fences or conversational text."""
 
-                raw_resp = chat_completion.choices[0].message.content.strip()
-                # Clean possible markdown fences
+        try:
+            chat_completion = self.client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a neutral, highly rigorous explainable AI fake-news fact-checking engine. You MUST output a single valid JSON object strictly matching the required schema."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                model=settings.GROQ_MODEL,
+                temperature=0.1,
+                max_tokens=1500,
+                response_format={"type": "json_object"}
+            )
+
+            raw_resp = chat_completion.choices[0].message.content.strip()
+            result = json.loads(raw_resp)
+            result["engine"] = f"Groq AI Intelligence Engine ({settings.GROQ_MODEL})"
+            return result
+
+        except Exception as e:
+            print(f"[EvidenceVerifier] Groq API call error: {e}")
+            try:
+                # Fallback lenient regex match
                 cleaned_json = re.sub(r'^```(?:json)?\s*', '', raw_resp, flags=re.MULTILINE)
                 cleaned_json = re.sub(r'\s*```$', '', cleaned_json, flags=re.MULTILINE)
-                
-                # Find JSON bounds
                 json_match = re.search(r'(\{[\s\S]*\})', cleaned_json)
                 if json_match:
-                    result = json.loads(json_match.group(1))
-                    result["engine"] = f"Groq AI Evidence Engine ({settings.GROQ_MODEL})"
-                    return result
-                else:
-                    return self._fallback_evidence_verification(headline, content)
+                    res = json.loads(json_match.group(1))
+                    res["engine"] = f"Groq AI Intelligence Engine ({settings.GROQ_MODEL})"
+                    return res
+            except Exception:
+                pass
 
-            except Exception as e:
-                print(f"[EvidenceVerifier] Groq API fallback triggered: {e}")
-                return self._fallback_evidence_verification(headline, content)
-        else:
-            return self._fallback_evidence_verification(headline, content)
+        return None
+
+    def verify_claims(self, headline: str, content: str) -> Dict[str, Any]:
+        """Legacy compatibility method returning claims format."""
+        groq_res = self.deep_analyze_with_groq(headline, content)
+        if groq_res:
+            return {
+                "overall_evidence_verdict": "CONTRADICTED" if groq_res.get("is_fake") else "SUPPORTED",
+                "confidence_score": groq_res.get("confidence", 85),
+                "summary_reasoning": groq_res.get("verdict_summary", ""),
+                "claims": groq_res.get("claims", []),
+                "engine": groq_res.get("engine", "Groq AI Engine")
+            }
+        
+        return self._fallback_evidence_verification(headline, content)
 
     def _fallback_evidence_verification(self, headline: str, content: str) -> Dict[str, Any]:
         """Heuristic rule-based evidence verification fallback."""
@@ -140,7 +188,7 @@ Respond with JSON only."""
                     "relationship": "Independent Wire Verification"
                 }
             ],
-            "engine": "TruthLens Heuristic Evidence Analyzer (Local Fallback)"
+            "engine": "TruthLens Heuristic Analyzer (Local Fallback)"
         }
 
 evidence_verifier = EvidenceVerifier()

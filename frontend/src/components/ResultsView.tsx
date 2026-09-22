@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { 
   ShieldCheck, AlertTriangle, AlertOctagon, HelpCircle, Download, 
-  Copy, Check, ArrowLeft, Eye, Zap, Compass, Info, CheckCircle2, XCircle
+  Copy, Check, ArrowLeft, Eye, Zap, Compass, Info, CheckCircle2, XCircle,
+  Camera, Globe, ImagePlus, ExternalLink, Search
 } from 'lucide-react';
 import { api } from '../services/api';
 import type { AnalysisResponse } from '../services/api';
@@ -379,6 +380,232 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ result, onNewAnalysis 
             className="p-5 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 text-sm leading-relaxed max-h-[420px] overflow-y-auto"
             dangerouslySetInnerHTML={{ __html: result.highlighted_analysis.highlighted_html }}
           />
+        </div>
+      )}
+
+      {/* Social Media & Image Analysis Section */}
+      {(result.social_media_analysis || result.image_analysis || result.similar_articles) && (
+        <div className="space-y-4">
+          
+          {/* Section Header */}
+          <div className="flex items-center gap-2 pt-2">
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+              result.source_type === 'instagram' 
+                ? 'bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400' 
+                : 'bg-gradient-to-br from-cyan-500 to-blue-500'
+            }`}>
+              {result.source_type === 'instagram' 
+                ? <Camera className="w-4 h-4 text-white" /> 
+                : <ImagePlus className="w-4 h-4 text-white" />}
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">
+                {result.source_type === 'instagram' ? 'Instagram Post Analysis' : 'Image & Vision AI Analysis'}
+              </h3>
+              <p className="text-[11px] text-slate-500">AI-powered cross-referencing with verified news sources</p>
+            </div>
+          </div>
+
+          {/* Image Analysis Details */}
+          {result.image_analysis && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
+              <h4 className="text-xs font-bold text-slate-800 uppercase font-mono tracking-wider flex items-center gap-1.5">
+                <Eye className="w-3.5 h-3.5 text-blue-500" />
+                AI Vision Analysis
+              </h4>
+
+              {/* Image Description */}
+              {result.image_analysis.description && (
+                <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-200">
+                  <span className="text-[10px] font-mono font-bold text-blue-600 uppercase">Image Description</span>
+                  <p className="text-xs text-blue-900 mt-1 leading-relaxed">
+                    {result.image_analysis.description}
+                  </p>
+                </div>
+              )}
+
+              {/* Extracted Text (OCR) */}
+              {result.image_analysis.extracted_text && (
+                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-mono font-bold text-amber-700 uppercase">Extracted Text (OCR)</span>
+                    {result.image_analysis.text_confidence && (
+                      <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                        result.image_analysis.text_confidence === 'HIGH' 
+                          ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                          : result.image_analysis.text_confidence === 'MEDIUM'
+                          ? 'bg-amber-100 text-amber-800 border-amber-300'
+                          : 'bg-slate-100 text-slate-600 border-slate-300'
+                      }`}>
+                        {result.image_analysis.text_confidence} CONFIDENCE
+                      </span>
+                    )}
+                  </div>
+                  <pre className="text-xs text-amber-900 mt-1 leading-relaxed whitespace-pre-wrap font-mono bg-white/50 rounded-lg p-2.5 border border-amber-100">
+                    {result.image_analysis.extracted_text}
+                  </pre>
+                </div>
+              )}
+
+              {/* Image Type Badge */}
+              {result.image_analysis.image_type && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-slate-500">Detected Type:</span>
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                    {result.image_analysis.image_type}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Social Media Cross-Reference Verdict */}
+          {result.social_media_analysis && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
+              <h4 className="text-xs font-bold text-slate-800 uppercase font-mono tracking-wider flex items-center gap-1.5">
+                <Search className="w-3.5 h-3.5 text-purple-500" />
+                AI Cross-Reference Verdict
+              </h4>
+
+              {/* Verdict Badge */}
+              {result.social_media_analysis.social_verdict && (
+                <div className={`p-4 rounded-xl border flex items-center gap-3 ${
+                  result.social_media_analysis.social_verdict.includes('TRUE') 
+                    ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+                    : result.social_media_analysis.social_verdict.includes('FALSE')
+                    ? 'bg-rose-50 border-rose-300 text-rose-950'
+                    : result.social_media_analysis.social_verdict.includes('MISLEADING')
+                    ? 'bg-amber-50 border-amber-300 text-amber-950'
+                    : 'bg-slate-50 border-slate-300 text-slate-900'
+                }`}>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                    result.social_media_analysis.social_verdict.includes('TRUE')
+                      ? 'bg-emerald-600 text-white'
+                      : result.social_media_analysis.social_verdict.includes('FALSE')
+                      ? 'bg-rose-600 text-white'
+                      : result.social_media_analysis.social_verdict.includes('MISLEADING')
+                      ? 'bg-amber-500 text-white'
+                      : 'bg-slate-500 text-white'
+                  }`}>
+                    {result.social_media_analysis.social_verdict.includes('TRUE') 
+                      ? <CheckCircle2 className="w-5 h-5" />
+                      : result.social_media_analysis.social_verdict.includes('FALSE')
+                      ? <XCircle className="w-5 h-5" />
+                      : <AlertTriangle className="w-5 h-5" />}
+                  </div>
+                  <div>
+                    <span className="text-xs font-mono font-black uppercase tracking-wider">
+                      {result.social_media_analysis.social_verdict}
+                    </span>
+                    {result.social_media_analysis.confidence !== undefined && (
+                      <span className="text-[10px] font-mono text-slate-500 ml-2">
+                        (Confidence: {result.social_media_analysis.confidence}%)
+                      </span>
+                    )}
+                    <p className="text-xs mt-0.5 opacity-80">
+                      {result.social_media_analysis.reasoning}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Key Findings */}
+              {result.social_media_analysis.key_findings && result.social_media_analysis.key_findings.length > 0 && (
+                <div className="space-y-2">
+                  <span className="text-[10px] font-mono font-bold text-slate-600 uppercase">Key Findings</span>
+                  {result.social_media_analysis.key_findings.map((finding, i) => (
+                    <div key={i} className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 flex items-start gap-2">
+                      <span className="w-5 h-5 rounded-full bg-purple-100 text-purple-800 font-bold flex items-center justify-center shrink-0 text-[10px]">
+                        {i + 1}
+                      </span>
+                      <span>{finding}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Recommendation */}
+              {result.social_media_analysis.recommendation && (
+                <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-800 flex items-start gap-2">
+                  <Info className="w-4 h-4 shrink-0 text-blue-500 mt-0.5" />
+                  <span><strong>Recommendation:</strong> {result.social_media_analysis.recommendation}</span>
+                </div>
+              )}
+
+              {/* Engine Badge */}
+              {result.social_media_analysis.engine && (
+                <div className="text-[10px] font-mono text-slate-400 text-right">
+                  Powered by: {result.social_media_analysis.engine}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Similar Articles Found */}
+          {result.similar_articles && result.similar_articles.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3 shadow-sm">
+              <h4 className="text-xs font-bold text-slate-800 uppercase font-mono tracking-wider flex items-center gap-1.5">
+                <Globe className="w-3.5 h-3.5 text-emerald-500" />
+                Similar News Found Online ({result.similar_articles.length})
+              </h4>
+
+              <div className="space-y-2">
+                {result.similar_articles.map((article, i) => (
+                  <a
+                    key={i}
+                    href={article.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block p-3.5 rounded-xl bg-slate-50 border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/30 transition-all group"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1 min-w-0">
+                        <p className="text-xs font-bold text-slate-800 group-hover:text-emerald-700 transition-colors truncate">
+                          {article.title}
+                        </p>
+                        <p className="text-[11px] text-slate-500 line-clamp-2">
+                          {article.snippet}
+                        </p>
+                      </div>
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-300 group-hover:text-emerald-500 shrink-0 mt-0.5 transition-colors" />
+                    </div>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Matching Sources from LLM */}
+          {result.social_media_analysis?.matching_sources && result.social_media_analysis.matching_sources.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-3 shadow-sm">
+              <h4 className="text-xs font-bold text-slate-800 uppercase font-mono tracking-wider flex items-center gap-1.5">
+                <Compass className="w-3.5 h-3.5 text-amber-500" />
+                Source Cross-Reference
+              </h4>
+              <div className="space-y-2">
+                {result.social_media_analysis.matching_sources.map((source, i) => (
+                  <div key={i} className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-slate-800 truncate">{source.title}</p>
+                      {source.url && (
+                        <a href={source.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-500 hover:underline font-mono truncate block">
+                          {source.url}
+                        </a>
+                      )}
+                    </div>
+                    <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border whitespace-nowrap ${
+                      source.relationship === 'CONFIRMS' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' :
+                      source.relationship === 'CONTRADICTS' ? 'bg-rose-100 text-rose-800 border-rose-300' :
+                      source.relationship === 'PARTIALLY CONFIRMS' ? 'bg-amber-100 text-amber-800 border-amber-300' :
+                      'bg-slate-100 text-slate-600 border-slate-300'
+                    }`}>
+                      {source.relationship}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

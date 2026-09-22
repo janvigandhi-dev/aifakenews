@@ -112,6 +112,41 @@ export interface AnalysisResponse {
     engine?: string;
   };
   disclaimer: string;
+  // Social media & image analysis extensions
+  source_type?: 'instagram' | 'image_upload';
+  social_media_analysis?: {
+    social_verdict?: string;
+    confidence?: number;
+    reasoning?: string;
+    key_findings?: string[];
+    matching_sources?: Array<{
+      title: string;
+      url: string;
+      relationship: string;
+    }>;
+    recommendation?: string;
+    engine?: string;
+    search_results_count?: number;
+  };
+  image_analysis?: {
+    description?: string;
+    extracted_text?: string;
+    image_type?: string;
+    has_text?: boolean;
+    text_confidence?: string;
+  };
+  similar_articles?: Array<{
+    title: string;
+    url: string;
+    snippet: string;
+  }>;
+  scraped_metadata?: {
+    og_title?: string;
+    og_description?: string;
+    og_image?: string;
+    context_quality?: string;
+    context_note?: string;
+  };
 }
 
 export const api = {
@@ -198,6 +233,41 @@ export const api = {
   async retrainModels() {
     const res = await fetch(`${API_BASE_URL}/api/dataset/retrain`, { method: 'POST' });
     return res.json();
+  },
+
+  async analyzeInstagram(payload: { url: string; model_name?: string; verify_evidence?: boolean }): Promise<AnalysisResponse> {
+    const res = await fetch(`${API_BASE_URL}/api/analyze-instagram`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Instagram analysis request failed');
+    }
+    const data = await res.json();
+    if (data.success === false) {
+      throw new Error(data.error || 'Failed to analyze Instagram post');
+    }
+    return data;
+  },
+
+  async analyzeImage(file: File): Promise<AnalysisResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API_BASE_URL}/api/analyze-image`, {
+      method: 'POST',
+      body: formData
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Image analysis request failed');
+    }
+    const data = await res.json();
+    if (data.success === false) {
+      throw new Error(data.error || 'Failed to analyze image');
+    }
+    return data;
   },
 
   getPdfExportUrl(id: string) {
