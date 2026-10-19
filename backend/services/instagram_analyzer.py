@@ -376,13 +376,16 @@ Respond with JSON only."""
                     ],
                     model=settings.GROQ_MODEL,
                     temperature=0.1,
-                    max_tokens=800,
-                    response_format={"type": "json_object"}
+                    max_tokens=2000
                 )
                 raw = completion.choices[0].message.content.strip()
-                return json.loads(raw)
+                cleaned = re.sub(r'^```(?:json)?\s*', '', raw, flags=re.MULTILINE)
+                cleaned = re.sub(r'\s*```$', '', cleaned, flags=re.MULTILINE)
+                json_match = re.search(r'(\{[\s\S]*\})', cleaned)
+                if json_match:
+                    return json.loads(json_match.group(1))
             except Exception as e:
-                print(f"[InstagramAnalyzer] LLM OCR analysis error: {e}")
+                print(f"[InstagramAnalyzer] LLM OCR analysis note: {e}")
 
         # 4. Fallback if no OCR or text
         if extracted_text:

@@ -1,6 +1,18 @@
 import os
+import sys
+import re
+import json
 from pathlib import Path
 from typing import Optional, Dict, Any
+
+# Ensure Windows console encoding never fails on Unicode/Indic news
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
 from fastapi import FastAPI, HTTPException, Response, Query, BackgroundTasks, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -177,16 +189,37 @@ async def analyze_unified(
             detail="Please provide news text/description or attach an image containing text to verify."
         )
 
+    # Filter out common user meta-questions from user_text
+    meta_question_regex = r'(?i)^(does\s+this\s+news\s+(is\s+)?(true|false|real|fake)|is\s+this\s+(news\s+)?(true|false|real|fake|misleading)|is\s+it\s+(true|false|real|fake)|check\s+(if\s+)?(this\s+)?(is\s+)?(true|false|real|fake)|verify\s+(this\s+)?(news|claim|article)?|tell\s+me\s+if\s+this\s+is\s+(true|false|real|fake)|true\s+or\s+false|real\s+or\s+fake)[\?\!\.\s]*$'
+    is_meta_question = bool(re.match(meta_question_regex, user_text.strip()))
+
+    # Strip question prefix if user typed "is this true: Chandrayaan 3 landed"
+    clean_user_text = re.sub(
+        r'(?i)^(does\s+this\s+news\s+(is\s+)?(true|false|real|fake)|is\s+this\s+(news\s+)?(true|false|real|fake|misleading)|is\s+it\s+(true|false|real|fake)|check\s+(if\s+)?(this\s+)?(is\s+)?(true|false|real|fake)|verify\s+(this\s+)?(news|claim|article)?|tell\s+me\s+if\s+this\s+is\s+(true|false|real|fake)|true\s+or\s+false|real\s+or\s+fake)[\:\?\!\-\s]+',
+        '',
+        user_text.strip()
+    )
+
     # Determine primary headline & content
-    if user_text and ocr_text:
-        headline = user_text.split("\n")[0][:150]
-        content = f"{user_text}\n\n[Extracted Text from Attached Image]:\n{ocr_text}"
+    if is_meta_question:
+        if ocr_text and len(ocr_text.strip()) > 5:
+            headline = ocr_text.split("\n")[0][:150]
+            content = ocr_text
+        elif image_analysis_meta and image_analysis_meta.get("description"):
+            headline = image_analysis_meta.get("description", "Uploaded Image Claim")[:150]
+            content = image_analysis_meta.get("description", "")
+        else:
+            headline = user_text[:150]
+            content = user_text
+    elif clean_user_text and ocr_text:
+        headline = clean_user_text.split("\n")[0][:150]
+        content = f"{clean_user_text}\n\n[Extracted Text from Attached Image]:\n{ocr_text}"
     elif ocr_text:
         headline = ocr_text.split("\n")[0][:150]
         content = ocr_text
     else:
-        headline = user_text.split("\n")[0][:150]
-        content = user_text
+        headline = (clean_user_text or user_text).split("\n")[0][:150]
+        content = clean_user_text or user_text
 
     # 4. Run Live Internet Search & Deep LLM Cross-Referencing
     deep_evidence = evidence_verifier.deep_analyze_with_internet(headline, content, ocr_text)
