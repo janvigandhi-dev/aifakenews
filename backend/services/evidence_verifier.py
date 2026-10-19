@@ -305,6 +305,7 @@ YOUR TASK:
    - Do NOT mark a news story fake simply because of minor differences in headline wording or because international wire services did not cover a local or regional Indian event.
    - If the claim is an established historical fact (e.g. 1983 Cricket World Cup victory, 1947 Independence, 1969 Moon Landing), mark is_fake = false, verdict = "REAL / LOW RISK", even if search engine returned limited results.
    - If the claim is a known hoax, fabricated rumor, viral chain message (e.g. ₹2000 note GPS chip, UNESCO best anthem, miracle 48h cancer cure), or if fact-checkers label it false/hoax/misleading, mark is_fake = true, verdict = "LIKELY MISLEADING", fake_percentage = 85.0 to 95.0, real_percentage = 5.0 to 15.0.
+   - Hyper-Local, Campus, or Community Events: If the claim describes a normal, plausible local event (e.g. college garba celebration, campus festival, local workshop, school sports day, award ceremony, student poster) that contains NO sensationalism, scam signals, or conspiracy claims, and the institution or venue exists, mark is_fake = false, verdict = "REAL / LOW RISK", fake_percentage = 10.0 to 15.0, real_percentage = 85.0 to 90.0, noting that it is a credible community or institutional event.
    - If the claim cannot be verified anywhere and uses excessive sensationalism or clickbait fraud, mark is_fake = true, verdict = "LIKELY MISLEADING".
 4. Classify each source reference clearly as:
    - "CONFIRMS AS REAL" (if the source verifies the event happened)

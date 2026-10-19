@@ -1,4 +1,26 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://127.0.0.1:8000' : '');
+
+async function parseJsonOrError(res: Response, defaultMessage: string): Promise<any> {
+  const text = await res.text();
+  if (!res.ok) {
+    if (text) {
+      try {
+        const json = JSON.parse(text);
+        throw new Error(json.detail || json.error || json.message || `${defaultMessage} (${res.status})`);
+      } catch (e: any) {
+        if (e.message && !e.message.includes('JSON')) throw e;
+        throw new Error(text.length < 150 ? text : `${defaultMessage} (${res.status})`);
+      }
+    }
+    throw new Error(`${defaultMessage} (HTTP ${res.status})`);
+  }
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error('Received invalid response from server.');
+  }
+}
 
 export interface AnalysisResponse {
   id?: string;
@@ -183,11 +205,7 @@ export const api = {
       method: 'POST',
       body: formData
     });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || 'Analysis request failed');
-    }
-    const data = await res.json();
+    const data = await parseJsonOrError(res, 'Analysis request failed');
     if (data.success === false) {
       throw new Error(data.error || 'Failed to analyze content');
     }
@@ -200,11 +218,7 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || 'Analysis request failed');
-    }
-    return res.json();
+    return parseJsonOrError(res, 'Analysis request failed');
   },
 
   async analyzeUrl(payload: { url: string; model_name?: string; verify_evidence?: boolean }): Promise<AnalysisResponse> {
@@ -213,11 +227,7 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || 'URL analysis request failed');
-    }
-    const data = await res.json();
+    const data = await parseJsonOrError(res, 'URL analysis request failed');
     if (data.success === false) {
       throw new Error(data.error || 'Failed to extract content from URL');
     }
