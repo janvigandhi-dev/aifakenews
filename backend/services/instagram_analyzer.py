@@ -15,6 +15,14 @@ from bs4 import BeautifulSoup
 from groq import Groq
 from backend.config import settings
 
+# Google Gemini GenAI SDK
+try:
+    from google import genai
+    from google.genai import types
+except ImportError:
+    genai = None
+    types = None
+
 # DuckDuckGo search for finding similar news
 try:
     from duckduckgo_search import DDGS
@@ -25,11 +33,19 @@ except ImportError:
 class InstagramAnalyzer:
     def __init__(self):
         self.client = None
+        self.gemini_client = None
+
         if settings.GROQ_API_KEY:
             try:
                 self.client = Groq(api_key=settings.GROQ_API_KEY)
             except Exception as e:
                 print(f"[InstagramAnalyzer] Groq initialization warning: {e}")
+
+        if settings.GEMINI_API_KEY and genai:
+            try:
+                self.gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
+            except Exception as e:
+                print(f"[InstagramAnalyzer] Gemini initialization warning: {e}")
 
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -317,11 +333,76 @@ Respond with JSON only."""
 
     def _analyze_image_with_vision(self, image_bytes: bytes, filename: str) -> Dict[str, Any]:
         """
-        Extract text and describe image using local OCR (EasyOCR / PyTesseract) and LLM reasoning.
+        Multimodal Image OCR and Reasoning:
+        1. Google Gemini Vision (primary): Flawlessly reads Gujarati, Hindi, Devanagari, English, and regional text from newspaper clippings, notices, circulars, and screenshots.
+        2. EasyOCR / PyTesseract + Groq (fallback if Gemini unavailable).
         """
-        extracted_text = ""
+        # 1. Try Google Gemini Vision first
+        if self.gemini_client and genai and types:
+            try:
+                ext = filename.lower().split('.')[-1] if '.' in filename else 'jpeg'
+                mime_map = {
+                    'jpg': 'image/jpeg',
+                    'jpeg': 'image/jpeg',
+                    'png': 'image/png',
+                    'webp': 'image/webp',
+                    'gif': 'image/gif'
+                }
+                mime_type = mime_map.get(ext, 'image/jpeg')
 
-        # 1. Try EasyOCR if available (cached reader)
+                image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
+                vision_prompt = """You are TruthLens Multimodal Vision Engine.
+A user uploaded an image that may be a newspaper clipping, pamphlet, circular, poster, or social media screenshot.
+The text may be in Gujarati (ગુજરાતી), Hindi (हिंदी), English, or another regional Indian language.
+
+YOUR TASK:
+1. Verbatim Text Extraction: Transcribe all visible text exactly in its original script without omitting anything.
+2. Translation & Interpretation: If the text is in Gujarati or Hindi, translate the core message and entities accurately into English.
+3. Headline: Extract the main prominent headline or subject.
+4. Content: Provide a clear 2-4 sentence summary of what the article or notice states.
+5. Image Type: Classify as NEWSPAPER_CLIPPING, OFFICIAL_CIRCULAR, EVENT_POSTER, SOCIAL_MEDIA_SCREENSHOT, or PHOTOGRAPH.
+
+Respond with ONLY a valid JSON object matching this schema:
+{
+  "image_description": "Visual summary of the image layout and subject",
+  "extracted_text": "Verbatim text transcribed in original language/script",
+  "headline": "Main headline or title",
+  "content": "English explanation and summary of the news claim or announcement",
+  "image_type": "NEWSPAPER_CLIPPING",
+  "has_text": true,
+  "text_confidence": "HIGH"
+}"""
+
+                vision_models = [settings.GEMINI_MODEL, "gemini-3.5-flash", "gemini-flash-latest"]
+                for vmodel in vision_models:
+                    if not vmodel:
+                        continue
+                    try:
+                        resp = self.gemini_client.models.generate_content(
+                            model=vmodel,
+                            contents=[image_part, vision_prompt],
+                            config=types.GenerateContentConfig(
+                                response_mime_type="application/json",
+                                temperature=0.1
+                            )
+                        )
+                        if resp and resp.text:
+                            raw = resp.text.strip()
+                            cleaned = re.sub(r'^```(?:json)?\s*', '', raw, flags=re.MULTILINE)
+                            cleaned = re.sub(r'\s*```$', '', cleaned, flags=re.MULTILINE)
+                            json_match = re.search(r'(\{[\s\S]*\})', cleaned)
+                            if json_match:
+                                parsed = json.loads(json_match.group(1))
+                                if parsed.get("extracted_text") or parsed.get("headline"):
+                                    parsed["engine"] = f"Google Gemini Vision ({vmodel})"
+                                    return parsed
+                    except Exception as vm_err:
+                        print(f"[InstagramAnalyzer] Gemini Vision ({vmodel}) attempt note: {vm_err}")
+            except Exception as gemini_err:
+                print(f"[InstagramAnalyzer] Gemini Vision error: {gemini_err}")
+
+        # 2. Local OCR Fallback (EasyOCR / PyTesseract)
+        extracted_text = ""
         try:
             import easyocr
             import numpy as np
@@ -337,7 +418,6 @@ Respond with JSON only."""
         except Exception as ocr_err:
             print(f"[InstagramAnalyzer] EasyOCR error or skipped: {ocr_err}")
 
-        # 2. Try PyTesseract if EasyOCR failed
         if not extracted_text:
             try:
                 import pytesseract
@@ -349,7 +429,7 @@ Respond with JSON only."""
             except Exception as t_err:
                 pass
 
-        # 3. If we have extracted text or Groq client, ask Groq to analyze the claim
+        # 3. LLM interpretation of local OCR via Groq
         if self.client and extracted_text:
             prompt = f"""You are TruthLens, an Explainable AI fake news fact-checking system.
 A user uploaded an image from which the following text was extracted via OCR:

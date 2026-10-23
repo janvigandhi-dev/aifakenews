@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     GROQ_MODEL: str = "openai/gpt-oss-20b"
     GROQ_VISION_MODEL: str = "meta-llama/llama-4-scout-17b-16e-instruct"
     
+    # Google Gemini API for Multimodal Vision & Deep Fact-Checking
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+    
     # SQLite Database
     DATABASE_URL: str = f"sqlite:///{BASE_DIR}/truthlens.db"
     

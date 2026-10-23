@@ -25,19 +25,59 @@ except ImportError:
     except ImportError:
         DDGS = None
 
+# Google Gemini GenAI SDK
+try:
+    from google import genai
+    from google.genai import types
+except ImportError:
+    genai = None
+    types = None
+
 
 class EvidenceVerifier:
     def __init__(self):
         self.client = None
-        self._init_client()
+        self.gemini_client = None
+        self._init_groq_client()
+        self._init_gemini_client()
 
-    def _init_client(self):
+    def _init_groq_client(self):
         key = settings.GROQ_API_KEY
         if key:
             try:
                 self.client = Groq(api_key=key)
             except Exception as e:
                 print(f"[EvidenceVerifier] Groq initialization warning: {e}")
+
+    def _init_gemini_client(self):
+        key = settings.GEMINI_API_KEY
+        if key and genai:
+            try:
+                self.gemini_client = genai.Client(api_key=key)
+            except Exception as e:
+                print(f"[EvidenceVerifier] Gemini initialization warning: {e}")
+
+    def _detect_historical_context(self, text: str) -> bool:
+        """
+        Detects if text refers to past events, historical milestones, or older news
+        (e.g., 1970s, 1980s, 1990s, 2000s, 2010s, early 2020s).
+        """
+        if not text:
+            return False
+        # Year pattern (1800-2024)
+        year_match = re.search(r'\b(18\d\d|19\d\d|200\d|201\d|202[0-4])\b', text)
+        if year_match:
+            return True
+
+        historical_markers = [
+            "historic", "historical", "world cup", "pokhran", "demonetisation", "demonetization",
+            "earthquake", "tsunami", "former prime minister", "former president", "passed away",
+            "independence", "in the year", "apollo", "kargil", "constitution", "treaty",
+            "signed in", "launched in", "established in", "archived", "old news", "decades ago",
+            "anniversary", "memorial", "in 1983", "in 1998", "in 2001", "in 2011", "in 2016"
+        ]
+        text_lower = text.lower()
+        return any(m in text_lower for m in historical_markers)
 
     def clean_search_query(self, headline: str, content: str = "", ocr_text: str = "") -> str:
         """
@@ -80,31 +120,56 @@ class EvidenceVerifier:
 
         # Detect non-ASCII scripts (e.g. Gujarati, Hindi, etc.)
         has_indic = bool(re.search(r'[\u0900-\u0D7F]', cleaned))
-        if has_indic and self.client:
-            try:
-                # Ask Groq to extract English keywords for Indic regional text
-                kw_prompt = (
-                    "Extract 3 to 5 essential English search keywords to search Google News for verifying this claim. "
-                    "If the text is in Gujarati or Hindi, translate the core entities and topic into English keywords. "
-                    f"Text: {cleaned[:400]}"
-                )
-                kw_resp = self.client.chat.completions.create(
-                    messages=[{"role": "user", "content": kw_prompt}],
-                    model=settings.GROQ_MODEL,
-                    max_tokens=1500,
-                    temperature=0.0
-                )
-                kw_text = kw_resp.choices[0].message.content or ""
-                lines = [l.strip() for l in kw_text.split("\n") if l.strip() and not l.strip().startswith("*") and not l.strip().startswith("#")]
-                clean_lines = [re.sub(r'^\d+[\.\)]\s*', '', l).strip() for l in lines]
-                valid_kw = " ".join(clean_lines[:3]).strip()
-                if valid_kw:
-                    valid_kw = re.sub(r'[\?\#\!\@\$\%\^\*\(\)\_\+\=\[\]\{\}\;\:\"\\\|\<\>\/]+', ' ', valid_kw)
-                    valid_kw = re.sub(r'\s+', ' ', valid_kw).strip()
-                    if len(valid_kw.split()) >= 2:
-                        return " ".join(valid_kw.split()[:7])
-            except Exception as e:
-                print(f"[EvidenceVerifier] Groq Indic keyword translation note: {e}")
+        if has_indic:
+            # 1. Try Gemini first for translation / keyword extraction
+            if self.gemini_client:
+                try:
+                    kw_prompt = (
+                        "Extract 3 to 5 essential English search keywords to search news and encyclopedias for verifying this claim. "
+                        "If the text is in Gujarati or Hindi, translate the core entities and topic into English keywords. "
+                        f"Text: {cleaned[:400]}"
+                    )
+                    resp = self.gemini_client.models.generate_content(
+                        model=settings.GEMINI_MODEL,
+                        contents=kw_prompt
+                    )
+                    kw_text = resp.text.strip() if resp and resp.text else ""
+                    lines = [l.strip() for l in kw_text.split("\n") if l.strip() and not l.strip().startswith("*") and not l.strip().startswith("#")]
+                    clean_lines = [re.sub(r'^\d+[\.\)]\s*', '', l).strip() for l in lines]
+                    valid_kw = " ".join(clean_lines[:3]).strip()
+                    if valid_kw:
+                        valid_kw = re.sub(r'[\?\#\!\@\$\%\^\*\(\)\_\+\=\[\]\{\}\;\:\"\\\|\<\>\/]+', ' ', valid_kw)
+                        valid_kw = re.sub(r'\s+', ' ', valid_kw).strip()
+                        if len(valid_kw.split()) >= 2:
+                            return " ".join(valid_kw.split()[:7])
+                except Exception as e:
+                    print(f"[EvidenceVerifier] Gemini Indic keyword note: {e}")
+
+            # 2. Try Groq fallback
+            if self.client:
+                try:
+                    kw_prompt = (
+                        "Extract 3 to 5 essential English search keywords to search Google News for verifying this claim. "
+                        "If the text is in Gujarati or Hindi, translate the core entities and topic into English keywords. "
+                        f"Text: {cleaned[:400]}"
+                    )
+                    kw_resp = self.client.chat.completions.create(
+                        messages=[{"role": "user", "content": kw_prompt}],
+                        model=settings.GROQ_MODEL,
+                        max_tokens=1500,
+                        temperature=0.0
+                    )
+                    kw_text = kw_resp.choices[0].message.content or ""
+                    lines = [l.strip() for l in kw_text.split("\n") if l.strip() and not l.strip().startswith("*") and not l.strip().startswith("#")]
+                    clean_lines = [re.sub(r'^\d+[\.\)]\s*', '', l).strip() for l in lines]
+                    valid_kw = " ".join(clean_lines[:3]).strip()
+                    if valid_kw:
+                        valid_kw = re.sub(r'[\?\#\!\@\$\%\^\*\(\)\_\+\=\[\]\{\}\;\:\"\\\|\<\>\/]+', ' ', valid_kw)
+                        valid_kw = re.sub(r'\s+', ' ', valid_kw).strip()
+                        if len(valid_kw.split()) >= 2:
+                            return " ".join(valid_kw.split()[:7])
+                except Exception as e:
+                    print(f"[EvidenceVerifier] Groq Indic keyword translation note: {e}")
 
         # English extraction
         cleaned = re.sub(r'[\?\#\!\@\$\%\^\*\(\)\_\+\=\[\]\{\}\;\:\"\\\|\<\>\/]+', ' ', cleaned)
@@ -200,14 +265,15 @@ class EvidenceVerifier:
         Multi-Source Resilient News & Fact-Checking Aggregator:
         1. Google News RSS (India & International) - fast, resilient, zero rate-limit.
         2. Google News fact-check specific query for viral claims.
-        3. DuckDuckGo (DDGS) news & web text.
-        4. Wikipedia API for encyclopedic/historical topics.
+        3. Wikipedia API for encyclopedic/historical topics.
+        4. DuckDuckGo (DDGS) news & web text.
         """
         if not query or not query.strip():
             return []
 
         clean_query = re.sub(r'[\r\n\t]+', ' ', query).strip()
         search_terms = " ".join(clean_query.split()[:8])
+        is_historical = self._detect_historical_context(clean_query)
 
         articles = []
         seen_titles = set()
@@ -229,14 +295,13 @@ class EvidenceVerifier:
             fc_results = self._search_google_news_rss(f"{search_terms} fact check", max_results=3)
             add_unique(fc_results)
 
-        # 3. Wikipedia API (for historical, national, or scientific topics)
-        history_cues = ["world cup", "chandrayaan", "isro", "nasa", "war", "treaty", "constitution", "19", "20", "apollo"]
-        if any(w in search_terms.lower() for w in history_cues) and len(articles) < max_results:
+        # 3. Wikipedia API (ALWAYS checked for historical topics or when Google News has few results)
+        if (is_historical or len(articles) < 3):
             wiki_results = self._search_wikipedia_api(search_terms, max_results=2)
             add_unique(wiki_results)
 
-        # 4. DuckDuckGo Search (ONLY as fallback if Google News & Wikipedia returned 0 articles)
-        if len(articles) == 0 and DDGS:
+        # 4. DuckDuckGo Search (web fallback if needed)
+        if len(articles) < 3 and DDGS:
             try:
                 with DDGS(timeout=3) as ddgs:
                     ddg_results = list(ddgs.text(search_terms, backend="duckduckgo", max_results=3))
@@ -257,21 +322,125 @@ class EvidenceVerifier:
 
         return articles[:max_results]
 
+    def _call_gemini_api(self, prompt: str) -> Optional[Dict[str, Any]]:
+        """Calls Google Gemini GenAI SDK with model cascading fallback and JSON parsing."""
+        if not self.gemini_client:
+            return None
+
+        # Cascading list of models to try in case of temporary 503 or 404
+        candidate_models = [
+            settings.GEMINI_MODEL,
+            "gemini-3.5-flash-lite",
+            "gemini-flash-latest",
+            "gemini-3.1-flash-lite",
+            "gemini-3.5-flash"
+        ]
+        # Deduplicate while preserving order
+        unique_models = []
+        for m in candidate_models:
+            if m and m not in unique_models:
+                unique_models.append(m)
+
+        for model_name in unique_models:
+            try:
+                resp = self.gemini_client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        temperature=0.1
+                    )
+                )
+                if resp and resp.text:
+                    raw_text = resp.text.strip()
+                    cleaned = re.sub(r'^```(?:json)?\s*', '', raw_text, flags=re.MULTILINE)
+                    cleaned = re.sub(r'\s*```$', '', cleaned, flags=re.MULTILINE)
+                    json_match = re.search(r'(\{[\s\S]*\})', cleaned)
+                    if json_match:
+                        parsed = json.loads(json_match.group(1))
+                        parsed["_gemini_model"] = model_name
+                        return parsed
+            except Exception as e:
+                print(f"[EvidenceVerifier] Gemini ({model_name}) error: {e}. Trying next fallback...")
+
+        return None
+
+    def _call_groq_api(self, prompt: str) -> Optional[Dict[str, Any]]:
+        """Calls Groq LLaMA model with JSON response format and regex fallback."""
+        if not self.client:
+            return None
+
+        # Attempt 1: json_object format
+        try:
+            chat_completion = self.client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a professional fact-checking engine. Respond with a valid JSON object matching the requested schema exactly."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                model=settings.GROQ_MODEL,
+                temperature=0.1,
+                max_tokens=3000,
+                response_format={"type": "json_object"}
+            )
+            raw_resp = chat_completion.choices[0].message.content.strip()
+            return json.loads(raw_resp)
+        except Exception as e:
+            print(f"[EvidenceVerifier] Groq json_object attempt note: {e}")
+
+        # Attempt 2: raw completion + regex extraction
+        try:
+            chat_completion = self.client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a news fact-checking assistant. You MUST respond ONLY with a raw JSON object. Do not include markdown ticks, preamble, or commentary."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                model=settings.GROQ_MODEL,
+                temperature=0.1,
+                max_tokens=3000
+            )
+            raw_resp = chat_completion.choices[0].message.content.strip()
+            cleaned = re.sub(r'^```(?:json)?\s*', '', raw_resp, flags=re.MULTILINE)
+            cleaned = re.sub(r'\s*```$', '', cleaned, flags=re.MULTILINE)
+            json_match = re.search(r'(\{[\s\S]*\})', cleaned)
+            if json_match:
+                return json.loads(json_match.group(1))
+        except Exception as e2:
+            print(f"[EvidenceVerifier] Groq raw parse attempt error: {e2}")
+
+        return None
+
     def deep_analyze_with_internet(self, headline: str, content: str, ocr_text: str = "") -> Optional[Dict[str, Any]]:
         """
-        Complete Verification Pipeline:
+        Complete Dual-Engine Verification Pipeline (Google Gemini + Groq LLM):
         1. Cleans user text & extracts high-precision search query.
-        2. Queries multi-tier live news search (Google News RSS, DDGS, Wikipedia).
-        3. Cross-references search results with claim via Groq LLM reasoning.
-        4. Reconciles source evidence with verdict and returns clickable references.
+        2. Detects historical context (old news vs breaking news).
+        3. Queries multi-tier live search (Google News RSS, Wikipedia API, DDGS).
+        4. Cross-references search results + Parametric Training Knowledge (Gemini + Groq).
+        5. Performs consensus validation and returns comprehensive explainable results.
         """
         if not self.client and settings.GROQ_API_KEY:
-            self._init_client()
+            self._init_groq_client()
+        if not self.gemini_client and settings.GEMINI_API_KEY:
+            self._init_gemini_client()
 
         # Build full contextual text
         full_text = f"{headline}\n{content}".strip()
         if ocr_text and ocr_text.strip() not in (headline, content):
             full_text += f"\n\n[Extracted Text from Image (OCR)]:\n{ocr_text}"
+
+        is_historical = self._detect_historical_context(full_text)
 
         # 1. Clean query & Surf Internet for Live Matching News
         search_query = self.clean_search_query(headline, content, ocr_text)
@@ -286,31 +455,67 @@ class EvidenceVerifier:
                 )
             search_context = "\n\n".join(search_context_lines)
         else:
-            search_context = "No direct matching web articles were found on public news search engines for this specific search wording."
+            search_context = "No direct matching web articles were found on public daily news feeds for this specific query."
 
-        prompt = f"""You are TruthLens, the world's leading Explainable AI News Fact-Checking Engine.
-A user has submitted a news story/claim for verification. You have searched the internet for live reporting and fact-checks on this topic.
+        prompt = f"""You are TruthLens, the world's leading Explainable AI News Fact-Checking Engine powered by Google Gemini and Groq.
+A user has submitted a news story/claim for verification.
 
 USER SUBMISSION / CLAIM:
 {full_text[:3500]}
 
-REAL-TIME INTERNET SEARCH RESULTS:
+REAL-TIME INTERNET SEARCH & ENCYCLOPEDIC RESULTS:
 {search_context}
 
-YOUR TASK:
-1. Cross-reference the user's claim with the real-world news articles and fact-checks found on the internet.
-2. Determine whether the news is REAL/CREDIBLE or FAKE/MISINFORMATION.
-3. Verification Guidelines:
-   - If credible news sources (including national, regional, or international media like Times of India, The Hindu, NDTV, Indian Express, Divya Bhaskar, Sandesh, Gujarat Samachar, BBC, Reuters, AP, Bloomberg, CNBC, or official bodies like PIB / ISRO / Reserve Bank) confirm the event happened, mark is_fake = false, verdict = "REAL / LOW RISK", fake_percentage = 5.0 to 15.0, real_percentage = 85.0 to 95.0.
-   - Do NOT mark a news story fake simply because of minor differences in headline wording or because international wire services did not cover a local or regional Indian event.
-   - If the claim is an established historical fact (e.g. 1983 Cricket World Cup victory, 1947 Independence, 1969 Moon Landing), mark is_fake = false, verdict = "REAL / LOW RISK", even if search engine returned limited results.
-   - If the claim is a known hoax, fabricated rumor, viral chain message (e.g. ₹2000 note GPS chip, UNESCO best anthem, miracle 48h cancer cure), or if fact-checkers label it false/hoax/misleading, mark is_fake = true, verdict = "LIKELY MISLEADING", fake_percentage = 85.0 to 95.0, real_percentage = 5.0 to 15.0.
-   - Hyper-Local, Campus, or Community Events: If the claim describes a normal, plausible local event (e.g. college garba celebration, campus festival, local workshop, school sports day, award ceremony, student poster) that contains NO sensationalism, scam signals, or conspiracy claims, and the institution or venue exists, mark is_fake = false, verdict = "REAL / LOW RISK", fake_percentage = 10.0 to 15.0, real_percentage = 85.0 to 90.0, noting that it is a credible community or institutional event.
-   - If the claim cannot be verified anywhere and uses excessive sensationalism or clickbait fraud, mark is_fake = true, verdict = "LIKELY MISLEADING".
-4. Classify each source reference clearly as:
-   - "CONFIRMS AS REAL" (if the source verifies the event happened)
-   - "DEBUNKS AS HOAX" (if the source refutes or debunks the claim)
-   - "RELATED COVERAGE" (if it provides context or background)
+DETECTED HISTORICAL TIME CONTEXT:
+{"[HISTORICAL CLAIM DETECTED]: The claim mentions past years, historical events, or archived milestones." if is_historical else "[CURRENT / RECENT CLAIM]: The claim appears to be recent or contemporary."}
+
+CRITICAL VERIFICATION RULES & GUIDELINES:
+1. **OLD / HISTORICAL TRUE NEWS (PAST GENUINE EVENTS)**:
+   - If the claim describes an established historical event, past government decision, past sports victory, scientific milestone, past disaster, or documented historical occurrence (e.g., 1983 Cricket World Cup, 1998 Pokhran nuclear tests, 2016 demonetisation of ₹500/₹1000 notes, 2001 Gujarat earthquake, 1969 Apollo Moon landing, 1947 Indian Independence, 2011 World Cup victory, historic laws/elections):
+   - **DO NOT mark it as fake simply because today's daily news RSS returns few or zero articles!**
+   - Verify it using your vast internal parametric training knowledge and any Wikipedia/encyclopedic references found.
+   - If it genuinely occurred in history, you MUST mark:
+     "is_fake": false,
+     "verdict": "REAL / HISTORICAL FACT",
+     "fake_percentage": 5.0,
+     "real_percentage": 95.0,
+     "confidence": 95.0.
+   - In explanation_bullets, clearly state that this is a confirmed historical event that genuinely took place on the documented date/year.
+
+2. **DEBUNKED URBAN LEGENDS & HISTORICAL HOAXES**:
+   - If the claim is a known viral myth or urban legend that has circulated for years (e.g., "₹2000 note has a nano GPS chip", "UNESCO declared Indian national anthem best in the world", "NASA spent millions on space pen while Russians used pencil", "miracle 48h cancer cure suppressed by big pharma", "salt water car suppressed by oil mafia", "UNESCO declared Narendra Modi best PM"):
+   - You MUST mark:
+     "is_fake": true,
+     "verdict": "DEBUNKED URBAN LEGEND / HOAX",
+     "fake_percentage": 92.0,
+     "real_percentage": 8.0,
+     "confidence": 95.0.
+   - Clearly explain why this is a historically documented myth.
+
+3. **CURRENT / RECENT NEWS**:
+   - If credible news sources (Times of India, The Hindu, NDTV, Indian Express, BBC, Reuters, AP, PIB, ANI, DD News) confirm the event, mark:
+     "is_fake": false,
+     "verdict": "REAL / LOW RISK",
+     "fake_percentage": 10.0,
+     "real_percentage": 90.0.
+   - If the claim is a fabricated rumor or contradicted by fact-checkers, mark:
+     "is_fake": true,
+     "verdict": "LIKELY MISLEADING",
+     "fake_percentage": 85.0 to 95.0,
+     "real_percentage": 5.0 to 15.0.
+
+4. **HYPER-LOCAL / CAMPUS / COMMUNITY EVENTS**:
+   - If the claim describes a normal, plausible local event (e.g. college garba celebration, university workshop, campus sports day, local student poster or academic event) that contains NO sensationalism, conspiracy claims, or scam signals, mark:
+     "is_fake": false,
+     "verdict": "REAL / PLAUSIBLE LOCAL EVENT",
+     "fake_percentage": 10.0,
+     "real_percentage": 90.0.
+
+5. **SOURCE RELATIONSHIPS**:
+   Classify each source reference clearly as:
+   - "CONFIRMS AS REAL" (verifies the event happened)
+   - "DEBUNKS AS HOAX" (refutes or debunks the claim)
+   - "RELATED COVERAGE" (provides context or historical encyclopedia record)
 
 Return a single valid JSON object matching this schema:
 {{
@@ -320,100 +525,92 @@ Return a single valid JSON object matching this schema:
   "real_percentage": 90.0,
   "misinformation_risk_score": 10.0,
   "confidence": 92.0,
-  "verdict_summary": "Concise 1-2 sentence verdict explaining what was verified on the internet and the final decision.",
+  "verdict_summary": "Concise 1-2 sentence verdict explaining the factual findings and final decision.",
   "explanation_bullets": [
-    "Specific reason 1 citing internet findings or corroboration",
-    "Specific reason 2 detailing factual inconsistencies or confirmation",
-    "Specific reason 3 analyzing framing"
+    "Specific reason 1 citing historical records or live internet findings",
+    "Specific reason 2 detailing factual verification or confirmation",
+    "Specific reason 3 analyzing context and authenticity"
   ],
   "claims": [
     {{
       "claim": "Extracted core factual claim",
       "stance": "SUPPORTED",
-      "evidence_assessment": "Explanation of whether the internet search confirms or refutes this claim.",
+      "evidence_assessment": "Explanation of whether historical knowledge or internet search confirms this claim.",
       "plausibility": "HIGH"
     }}
   ],
   "source_references": [
     {{
-      "title": "Article Title from Internet Search",
+      "title": "Article Title from Internet Search or Historical Record",
       "url": "https://...",
       "publisher": "Domain or News Outlet Name",
       "relationship": "CONFIRMS AS REAL",
-      "snippet": "Brief note on what this source states."
+      "snippet": "Brief note on what this source or historical record states."
     }}
   ],
   "flagged_phrases": [
     {{
-      "text": "exact phrase from user text",
+      "text": "exact phrase from text if sensational, or empty",
       "category": "Sensational Language",
-      "severity": "MEDIUM",
+      "severity": "LOW",
       "reason": "Why this was flagged"
     }}
   ]
 }}"""
 
+        gemini_result = None
+        groq_result = None
+
+        # 1. Query Google Gemini
+        if self.gemini_client:
+            gemini_result = self._call_gemini_api(prompt)
+
+        # 2. Query Groq
         if self.client:
-            # Try 1: request JSON object with sufficient token budget
-            try:
-                chat_completion = self.client.chat.completions.create(
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "You are a professional fact-checking engine. Respond with a valid JSON object matching the requested schema exactly."
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    model=settings.GROQ_MODEL,
-                    temperature=0.1,
-                    max_tokens=3000,
-                    response_format={"type": "json_object"}
-                )
+            groq_result = self._call_groq_api(prompt)
 
-                raw_resp = chat_completion.choices[0].message.content.strip()
-                result = json.loads(raw_resp)
-                return self._post_process_result(result, live_articles)
+        # 3. Dual-Engine Consensus Synthesis
+        final_result = None
+        engine_name = "TruthLens Explainable AI Engine"
 
-            except Exception as e:
-                print(f"[EvidenceVerifier] Groq json_object attempt note: {e}. Retrying with regex parsing...")
+        if gemini_result and groq_result:
+            # Both models responded! Synthesize consensus.
+            engine_name = "TruthLens Dual-Consensus AI Engine (Google Gemini + Groq Llama)"
+            gemini_fake = gemini_result.get("is_fake", False)
+            groq_fake = groq_result.get("is_fake", False)
 
-            # Try 2: retry without response_format and extract JSON via regex
-            try:
-                chat_completion = self.client.chat.completions.create(
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "You are a news fact-checking assistant. You MUST respond ONLY with a raw JSON object. Do not include markdown ticks, preamble, or commentary."
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    model=settings.GROQ_MODEL,
-                    temperature=0.1,
-                    max_tokens=3000
-                )
+            if gemini_fake == groq_fake:
+                # Full agreement
+                final_result = gemini_result
+                final_result["confidence"] = max(float(gemini_result.get("confidence", 90.0)), float(groq_result.get("confidence", 90.0)))
+            else:
+                # Disagreement: Gemini has far superior historical parametric knowledge
+                # If Gemini identified this as a historical fact or debunked myth, prioritize Gemini
+                if is_historical or "HISTORICAL" in str(gemini_result.get("verdict", "")).upper():
+                    final_result = gemini_result
+                else:
+                    # Default to Gemini's higher nuance
+                    final_result = gemini_result
 
-                raw_resp = chat_completion.choices[0].message.content.strip()
-                cleaned = re.sub(r'^```(?:json)?\s*', '', raw_resp, flags=re.MULTILINE)
-                cleaned = re.sub(r'\s*```$', '', cleaned, flags=re.MULTILINE)
-                json_match = re.search(r'(\{[\s\S]*\})', cleaned)
-                if json_match:
-                    result = json.loads(json_match.group(1))
-                    return self._post_process_result(result, live_articles)
+        elif gemini_result:
+            model_used = gemini_result.get("_gemini_model", settings.GEMINI_MODEL)
+            engine_name = f"TruthLens Neural Fact-Checker (Google {model_used})"
+            final_result = gemini_result
 
-            except Exception as e2:
-                print(f"[EvidenceVerifier] Groq raw parse attempt error: {e2}")
+        elif groq_result:
+            engine_name = f"TruthLens Web Reasoning Engine (Groq {settings.GROQ_MODEL})"
+            final_result = groq_result
 
-        # Fallback if Groq unavailable or completely failed
-        return self._fallback_internet_analysis(headline, full_text, live_articles)
+        # 4. If an LLM succeeded, post-process and return
+        if final_result:
+            final_result["engine"] = engine_name
+            return self._post_process_result(final_result, live_articles, is_historical)
 
-    def _post_process_result(self, result: Dict[str, Any], live_articles: List[Dict[str, str]]) -> Dict[str, Any]:
-        """Post-processes and logically reconciles predictions with verified sources."""
+        # 5. Fallback if both AI models failed or unavailable
+        return self._fallback_internet_analysis(headline, full_text, live_articles, is_historical)
+
+    def _post_process_result(self, result: Dict[str, Any], live_articles: List[Dict[str, str]], is_historical: bool = False) -> Dict[str, Any]:
+        """Post-processes and logically reconciles predictions with verified sources and historical context."""
         sources = result.get("source_references", [])
 
         # Guarantee source references are populated if live articles exist
@@ -437,14 +634,16 @@ Return a single valid JSON object matching this schema:
         # If any source explicitly debunks it as a hoax, is_fake must be True!
         if debunk_count >= 1:
             result["is_fake"] = True
-            result["verdict"] = "LIKELY MISLEADING"
+            if "HOAX" not in result.get("verdict", ""):
+                result["verdict"] = "LIKELY MISLEADING"
             result["fake_percentage"] = max(float(result.get("fake_percentage", 85.0)), 85.0)
             result["real_percentage"] = min(float(result.get("real_percentage", 15.0)), 15.0)
             result["misinformation_risk_score"] = result["fake_percentage"]
         # If sources confirm the event as real without debunking sources, is_fake must be False!
         elif confirm_count >= 1:
             result["is_fake"] = False
-            result["verdict"] = "REAL / LOW RISK"
+            if not result.get("verdict"):
+                result["verdict"] = "REAL / HISTORICAL FACT" if is_historical else "REAL / LOW RISK"
             result["fake_percentage"] = min(float(result.get("fake_percentage", 10.0)), 15.0)
             result["real_percentage"] = max(float(result.get("real_percentage", 90.0)), 85.0)
             result["misinformation_risk_score"] = result["fake_percentage"]
@@ -455,11 +654,10 @@ Return a single valid JSON object matching this schema:
             elif "real_percentage" in result and "fake_percentage" not in result:
                 result["fake_percentage"] = max(0.0, 100.0 - float(result["real_percentage"]))
 
-        result["engine"] = f"Groq Live Web Reasoning Engine ({settings.GROQ_MODEL})"
         result["internet_sources_found"] = len(live_articles)
         return result
 
-    def _fallback_internet_analysis(self, headline: str, text: str, articles: List[Dict[str, str]]) -> Dict[str, Any]:
+    def _fallback_internet_analysis(self, headline: str, text: str, articles: List[Dict[str, str]], is_historical: bool = False) -> Dict[str, Any]:
         """Intelligent heuristic fallback combining internet search results with rule-based heuristics."""
         combined_text = (headline + " " + text).lower()
         articles_text = " ".join([a["title"] + " " + a.get("snippet", "") for a in articles]).lower()
@@ -471,7 +669,7 @@ Return a single valid JSON object matching this schema:
 
         # Check for confirmation signals in articles
         has_confirmation = any(w in articles_text for w in [
-            "confirms", "announces", "reported", "statement", "official", "lands successfully", "wins"
+            "confirms", "announces", "reported", "statement", "official", "lands successfully", "wins", "wikipedia"
         ])
 
         # Check for obvious viral hoax keywords in user text
@@ -481,7 +679,17 @@ Return a single valid JSON object matching this schema:
         ]
         is_known_hoax = any(w in combined_text for w in known_hoax_words)
 
-        is_fake = is_known_hoax or has_debunking or (not has_confirmation and "leaked" in combined_text and "deep state" in combined_text)
+        # Historical true events shouldn't be penalized if no recent news
+        if is_historical and not is_known_hoax and not has_debunking:
+            is_fake = False
+            verdict = "REAL / HISTORICAL FACT"
+            fake_pct = 10.0
+            real_pct = 90.0
+        else:
+            is_fake = is_known_hoax or has_debunking or (not has_confirmation and "leaked" in combined_text and "deep state" in combined_text)
+            verdict = "LIKELY MISLEADING" if is_fake else ("REAL / LOW RISK" if articles else "SUSPICIOUS / REVIEW")
+            fake_pct = 90.0 if is_fake else (15.0 if articles else 45.0)
+            real_pct = 100.0 - fake_pct
 
         sources = []
         for a in articles[:4]:
@@ -493,33 +701,30 @@ Return a single valid JSON object matching this schema:
                 "snippet": a.get("snippet", "")
             })
 
-        fake_pct = 90.0 if is_fake else (15.0 if articles else 45.0)
-        real_pct = 100.0 - fake_pct
-
         return {
             "is_fake": is_fake,
-            "verdict": "LIKELY MISLEADING" if is_fake else ("REAL / LOW RISK" if articles else "SUSPICIOUS / REVIEW"),
+            "verdict": verdict,
             "fake_percentage": fake_pct,
             "real_percentage": real_pct,
             "misinformation_risk_score": fake_pct,
-            "confidence": 85.0 if (has_debunking or has_confirmation) else 70.0,
-            "verdict_summary": "Cross-referenced with live internet news articles. " + (
-                "Verified online reports disprove or contradict this claim." if is_fake else "Corroborated by accredited reporting."
+            "confidence": 85.0 if (has_debunking or has_confirmation or is_historical) else 70.0,
+            "verdict_summary": "Cross-referenced with online archives and encyclopedic knowledge. " + (
+                "Verified reports disprove or contradict this claim." if is_fake else "Corroborated by historical and news records."
             ),
             "explanation_bullets": [
-                "Identified core factual claims and queried online news databases for matching events.",
-                "Cross-referenced against verified fact-checking records and publisher databases."
+                "Identified core factual claims and queried online archives and databases for matching events.",
+                "Cross-referenced against verified fact-checking records, encyclopedia entries, and publisher databases."
             ],
             "claims": [
                 {
                     "claim": headline or text[:120],
                     "stance": "CONTRADICTED" if is_fake else "SUPPORTED",
-                    "evidence_assessment": "Assessed against live web search results.",
+                    "evidence_assessment": "Assessed against web archives and historical references.",
                     "plausibility": "LOW" if is_fake else "HIGH"
                 }
             ],
             "source_references": sources,
-            "engine": "TruthLens Heuristic Search Engine",
+            "engine": "TruthLens Resilient Knowledge Engine (Fallback)",
             "internet_sources_found": len(articles)
         }
 
