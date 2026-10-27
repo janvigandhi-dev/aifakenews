@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     
     # Groq API Key for Evidence Verification & Claim Extraction (read from environment or .env)
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
-    GROQ_MODEL: str = "openai/gpt-oss-20b"
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
     GROQ_VISION_MODEL: str = "meta-llama/llama-4-scout-17b-16e-instruct"
     
     # Google Gemini API for Multimodal Vision & Deep Fact-Checking

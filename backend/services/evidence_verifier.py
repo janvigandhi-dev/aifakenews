@@ -51,9 +51,12 @@ class EvidenceVerifier:
 
     def _init_gemini_client(self):
         key = settings.GEMINI_API_KEY
-        if key and genai:
+        if key and genai and types:
             try:
-                self.gemini_client = genai.Client(api_key=key)
+                self.gemini_client = genai.Client(
+                    api_key=key,
+                    http_options=types.HttpOptions(timeout=10000)
+                )
             except Exception as e:
                 print(f"[EvidenceVerifier] Gemini initialization warning: {e}")
 
@@ -121,7 +124,33 @@ class EvidenceVerifier:
         # Detect non-ASCII scripts (e.g. Gujarati, Hindi, etc.)
         has_indic = bool(re.search(r'[\u0900-\u0D7F]', cleaned))
         if has_indic:
-            # 1. Try Gemini first for translation / keyword extraction
+            # 1. Try Groq first for ultra-fast keyword translation (~0.8s)
+            if self.client:
+                try:
+                    kw_prompt = (
+                        "Extract 3 to 5 essential English search keywords to search Google News for verifying this claim. "
+                        "If the text is in Gujarati or Hindi, translate the core entities and topic into English keywords. "
+                        f"Text: {cleaned[:400]}"
+                    )
+                    kw_resp = self.client.chat.completions.create(
+                        messages=[{"role": "user", "content": kw_prompt}],
+                        model=settings.GROQ_MODEL,
+                        max_tokens=200,
+                        temperature=0.0
+                    )
+                    kw_text = kw_resp.choices[0].message.content or ""
+                    lines = [l.strip() for l in kw_text.split("\n") if l.strip() and not l.strip().startswith("*") and not l.strip().startswith("#")]
+                    clean_lines = [re.sub(r'^\d+[\.\)]\s*', '', l).strip() for l in lines]
+                    valid_kw = " ".join(clean_lines[:3]).strip()
+                    if valid_kw:
+                        valid_kw = re.sub(r'[\?\#\!\@\$\%\^\*\(\)\_\+\=\[\]\{\}\;\:\"\\\|\<\>\/]+', ' ', valid_kw)
+                        valid_kw = re.sub(r'\s+', ' ', valid_kw).strip()
+                        if len(valid_kw.split()) >= 2:
+                            return " ".join(valid_kw.split()[:7])
+                except Exception as e:
+                    print(f"[EvidenceVerifier] Groq Indic keyword translation note: {e}")
+
+            # 2. Try Gemini fallback if Groq unavailable
             if self.gemini_client:
                 try:
                     kw_prompt = (
@@ -144,32 +173,6 @@ class EvidenceVerifier:
                             return " ".join(valid_kw.split()[:7])
                 except Exception as e:
                     print(f"[EvidenceVerifier] Gemini Indic keyword note: {e}")
-
-            # 2. Try Groq fallback
-            if self.client:
-                try:
-                    kw_prompt = (
-                        "Extract 3 to 5 essential English search keywords to search Google News for verifying this claim. "
-                        "If the text is in Gujarati or Hindi, translate the core entities and topic into English keywords. "
-                        f"Text: {cleaned[:400]}"
-                    )
-                    kw_resp = self.client.chat.completions.create(
-                        messages=[{"role": "user", "content": kw_prompt}],
-                        model=settings.GROQ_MODEL,
-                        max_tokens=1500,
-                        temperature=0.0
-                    )
-                    kw_text = kw_resp.choices[0].message.content or ""
-                    lines = [l.strip() for l in kw_text.split("\n") if l.strip() and not l.strip().startswith("*") and not l.strip().startswith("#")]
-                    clean_lines = [re.sub(r'^\d+[\.\)]\s*', '', l).strip() for l in lines]
-                    valid_kw = " ".join(clean_lines[:3]).strip()
-                    if valid_kw:
-                        valid_kw = re.sub(r'[\?\#\!\@\$\%\^\*\(\)\_\+\=\[\]\{\}\;\:\"\\\|\<\>\/]+', ' ', valid_kw)
-                        valid_kw = re.sub(r'\s+', ' ', valid_kw).strip()
-                        if len(valid_kw.split()) >= 2:
-                            return " ".join(valid_kw.split()[:7])
-                except Exception as e:
-                    print(f"[EvidenceVerifier] Groq Indic keyword translation note: {e}")
 
         # English extraction
         cleaned = re.sub(r'[\?\#\!\@\$\%\^\*\(\)\_\+\=\[\]\{\}\;\:\"\\\|\<\>\/]+', ' ', cleaned)
@@ -300,8 +303,8 @@ class EvidenceVerifier:
             wiki_results = self._search_wikipedia_api(search_terms, max_results=2)
             add_unique(wiki_results)
 
-        # 4. DuckDuckGo Search (web fallback if needed)
-        if len(articles) < 3 and DDGS:
+        # 4. DuckDuckGo Search (fast web fallback only if no articles found from Google News or Wikipedia)
+        if len(articles) == 0 and DDGS:
             try:
                 with DDGS(timeout=3) as ddgs:
                     ddg_results = list(ddgs.text(search_terms, backend="duckduckgo", max_results=3))
@@ -323,45 +326,31 @@ class EvidenceVerifier:
         return articles[:max_results]
 
     def _call_gemini_api(self, prompt: str) -> Optional[Dict[str, Any]]:
-        """Calls Google Gemini GenAI SDK with model cascading fallback and JSON parsing."""
+        """Calls Google Gemini GenAI SDK with fast model fallback and JSON parsing."""
         if not self.gemini_client:
             return None
 
-        # Cascading list of models to try in case of temporary 503 or 404
-        candidate_models = [
-            settings.GEMINI_MODEL,
-            "gemini-3.5-flash-lite",
-            "gemini-flash-latest",
-            "gemini-3.1-flash-lite",
-            "gemini-3.5-flash"
-        ]
-        # Deduplicate while preserving order
-        unique_models = []
-        for m in candidate_models:
-            if m and m not in unique_models:
-                unique_models.append(m)
-
-        for model_name in unique_models:
-            try:
-                resp = self.gemini_client.models.generate_content(
-                    model=model_name,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        temperature=0.1
-                    )
+        model_name = settings.GEMINI_MODEL or "gemini-3.5-flash"
+        try:
+            resp = self.gemini_client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.1
                 )
-                if resp and resp.text:
-                    raw_text = resp.text.strip()
-                    cleaned = re.sub(r'^```(?:json)?\s*', '', raw_text, flags=re.MULTILINE)
-                    cleaned = re.sub(r'\s*```$', '', cleaned, flags=re.MULTILINE)
-                    json_match = re.search(r'(\{[\s\S]*\})', cleaned)
-                    if json_match:
-                        parsed = json.loads(json_match.group(1))
-                        parsed["_gemini_model"] = model_name
-                        return parsed
-            except Exception as e:
-                print(f"[EvidenceVerifier] Gemini ({model_name}) error: {e}. Trying next fallback...")
+            )
+            if resp and resp.text:
+                raw_text = resp.text.strip()
+                cleaned = re.sub(r'^```(?:json)?\s*', '', raw_text, flags=re.MULTILINE)
+                cleaned = re.sub(r'\s*```$', '', cleaned, flags=re.MULTILINE)
+                json_match = re.search(r'(\{[\s\S]*\})', cleaned)
+                if json_match:
+                    parsed = json.loads(json_match.group(1))
+                    parsed["_gemini_model"] = model_name
+                    return parsed
+        except Exception as e:
+            print(f"[EvidenceVerifier] Gemini ({model_name}) note: {e}")
 
         return None
 
@@ -385,7 +374,7 @@ class EvidenceVerifier:
                 ],
                 model=settings.GROQ_MODEL,
                 temperature=0.1,
-                max_tokens=3000,
+                max_tokens=800,
                 response_format={"type": "json_object"}
             )
             raw_resp = chat_completion.choices[0].message.content.strip()
@@ -408,7 +397,7 @@ class EvidenceVerifier:
                 ],
                 model=settings.GROQ_MODEL,
                 temperature=0.1,
-                max_tokens=3000
+                max_tokens=800
             )
             raw_resp = chat_completion.choices[0].message.content.strip()
             cleaned = re.sub(r'^```(?:json)?\s*', '', raw_resp, flags=re.MULTILINE)
@@ -561,13 +550,26 @@ Return a single valid JSON object matching this schema:
         gemini_result = None
         groq_result = None
 
-        # 1. Query Google Gemini
-        if self.gemini_client:
-            gemini_result = self._call_gemini_api(prompt)
+        # Execute Gemini and Groq in parallel for maximum speed and zero hang time
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            groq_future = executor.submit(self._call_groq_api, prompt) if self.client else None
+            gemini_future = executor.submit(self._call_gemini_api, prompt) if self.gemini_client else None
 
-        # 2. Query Groq
-        if self.client:
-            groq_result = self._call_groq_api(prompt)
+            # Collect Groq first (extremely fast, ~1.2 - 2.5s)
+            if groq_future:
+                try:
+                    groq_result = groq_future.result(timeout=5.0)
+                except Exception as e:
+                    print(f"[EvidenceVerifier] Groq parallel note: {e}")
+
+            # If Groq already succeeded, only wait a brief moment for Gemini for consensus; don't hold up the user!
+            gemini_timeout = 2.5 if groq_result else 5.0
+            if gemini_future:
+                try:
+                    gemini_result = gemini_future.result(timeout=gemini_timeout)
+                except Exception as e:
+                    pass
 
         # 3. Dual-Engine Consensus Synthesis
         final_result = None
